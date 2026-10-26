@@ -33,7 +33,7 @@ export const env = {
   workerTickMs: () => num(process.env.VIMO_WORKER_TICK_MS, 6000),
   maxImageBytes: () => num(process.env.VIMO_MAX_IMAGE_MB, 8) * 1024 * 1024,
   signupBonusCredits: () => num(process.env.VIMO_SIGNUP_BONUS, 0),
-  vodafoneCashNumber: () => clean(process.env.VODAFONE_CASH_NUMBER),
+  vodafoneCashNumber: () => clean(process.env.VODAFONE_CASH_NUMBER) || '01113878767',
   supportWhatsapp: () => clean(process.env.SUPPORT_WHATSAPP),
 };
 

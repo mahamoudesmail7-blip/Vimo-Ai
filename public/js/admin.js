@@ -134,7 +134,7 @@ async function renderVideos(view) {
     const { videos } = await api('GET', '/api/admin/videos');
     view.innerHTML = `
       <h1>كل الفيديوهات</h1>
-      <p class="sub">آخر ${fmt(videos.length)} فيديو على المنصة.</p>
+      <p class="sub">آخر ${fmt(videos.length)} فيديو على المنصة. «اعرضه» بيحط الفيديو في معرض الصفحة الرئيسية، فاختار بس اللي صاحبه موافق.</p>
       ${videos.length ? `<div class="card table-wrap"><table>
         <tr><th>المنتج</th><th>العميل</th><th>الشكل</th><th>الحالة</th><th>التاريخ</th><th></th></tr>
         ${videos.map((v) => { const [l, c] = STATUS[v.status] || [v.status, '']; return `<tr>
@@ -143,9 +143,14 @@ async function renderVideos(view) {
           <td>${esc(v.style)} · ${esc(v.aspectRatio)}</td>
           <td><span class="badge ${c}">${l}</span>${['COMPLETED', 'FAILED'].includes(v.status) ? '' : ` <span class="muted">${v.progress}%</span>`}${v.refunded ? ' <span class="badge">اترد</span>' : ''}</td>
           <td class="muted">${fmtDate(v.createdAt)}</td>
-          <td>${v.videoUrl ? `<a class="btn small" href="${v.videoUrl}" target="_blank">مشاهدة</a>` : ''}</td>
+          <td style="white-space:nowrap">${v.videoUrl ? `<a class="btn small" href="${v.videoUrl}" target="_blank">مشاهدة</a> <button class="btn small ${v.showcase ? 'ok' : ''}" data-showcase="${v.id}" data-on="${v.showcase ? '0' : '1'}">${v.showcase ? '★ في المعرض' : '☆ اعرضه'}</button>` : ''}</td>
         </tr>`; }).join('')}
       </table></div>` : '<div class="empty">مفيش فيديوهات لسه.</div>'}`;
+    $$('[data-showcase]', view).forEach((b) => { b.onclick = async () => {
+      try { await api('POST', `/api/admin/videos/${b.dataset.showcase}/showcase`, { on: b.dataset.on === '1' }); toast(b.dataset.on === '1' ? 'اتضاف لمعرض الصفحة الرئيسية' : 'اتشال من المعرض'); }
+      catch (err) { toast(err.message); }
+      load();
+    }; });
   };
   await load();
   state.poll = setInterval(() => load().catch(() => {}), 8000);

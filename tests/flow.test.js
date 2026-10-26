@@ -137,4 +137,56 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   const ledger = await prisma.creditTransaction.findMany({ where: { user: { email: 'mona@test.dev' } }, orderBy: { id: 'asc' } });
   assert.deepEqual(ledger.map((t) => t.reason), ['TOPUP', 'VIDEO', 'VIDEO', 'REFUND']);
   assert.equal(ledger.at(-1).balance, 2);
+
+  // script preview is free, and an edited script is what the clips say
+  r = await user('POST', '/api/videos/script-preview', { productName: 'ساعة', image: PNG, offer: 'بـ 300 جنيه' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.scenes.length, 3);
+  r = await user('GET', '/api/auth/me');
+  assert.equal(r.data.user.credits, 2, 'preview costs nothing');
+
+  r = await user('POST', '/api/videos', { productName: 'ساعة', image: PNG, script: { scenes: [{ voiceover: 'سطر واحد' }] } });
+  assert.equal(r.status, 400, 'wrong scene count refused');
+  r = await user('GET', '/api/auth/me');
+  assert.equal(r.data.user.credits, 2, 'refused request charges nothing');
+
+  const edited = [{ voiceover: 'الساعة دي فخامة بجد!' }, { voiceover: 'ستانلس ومقاومة للمية.' }, { voiceover: 'بـ 300 جنيه بس، اطلبها!' }];
+  const before = fake.submitted.length;
+  r = await user('POST', '/api/videos', { productName: 'ساعة', image: PNG, script: { scenes: edited } });
+  assert.equal(r.status, 201);
+  const mine = await settle(r.data.id);
+  assert.equal(mine.status, 'COMPLETED');
+  const prompts = fake.submitted.slice(before).filter((x) => !x.body.video_urls).map((x) => x.body.prompt);
+  assert.ok(edited.every((e, i) => prompts[i].includes(e.voiceover)), 'each clip speaks the edited line');
+  assert.equal(JSON.parse(mine.script_json).source, 'USER_EDITED');
+
+  // remake: same photo and script, a new charged render; not someone else's video
+  r = await stranger('POST', `/api/videos/${mine.id}/remake`, {});
+  assert.equal(r.status, 404);
+  r = await user('POST', `/api/videos/${mine.id}/remake`, {});
+  assert.equal(r.status, 201);
+  const again = await settle(r.data.id);
+  assert.equal(again.status, 'COMPLETED');
+  assert.equal(again.image_key, mine.image_key);
+  assert.deepEqual(JSON.parse(again.script_json).scenes.map((x) => x.voiceover), edited.map((x) => x.voiceover));
+  r = await user('GET', '/api/auth/me');
+  assert.equal(r.data.user.credits, 0);
+  r = await user('POST', `/api/videos/${mine.id}/remake`, {});
+  assert.equal(r.status, 402, 'no credits left');
+
+  // showcase: only an admin picks, only picked finished videos are public
+  const anon = client();
+  r = await anon('GET', `/api/showcase/${ok.id}/video`);
+  assert.equal(r.status, 404);
+  r = await user('POST', `/api/admin/videos/${ok.id}/showcase`, { on: true });
+  assert.equal(r.status, 403);
+  r = await admin('POST', `/api/admin/videos/${bad.id}/showcase`, { on: true });
+  assert.equal(r.status, 400, 'a failed video cannot be shown');
+  r = await admin('POST', `/api/admin/videos/${ok.id}/showcase`, { on: true });
+  assert.equal(r.data.showcase, true);
+  r = await anon('GET', '/api/showcase');
+  assert.deepEqual(r.data.videos.map((v) => v.id), [ok.id]);
+  assert.equal(JSON.stringify(r.data).includes('mona'), false, 'no customer data in the public list');
+  r = await anon('GET', `/api/showcase/${ok.id}/video`);
+  assert.equal(r.status, 200);
 });

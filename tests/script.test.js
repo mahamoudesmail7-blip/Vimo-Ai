@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { templateScript, scenePrompt, writeScript } from '../src/services/script.js';
+import { templateScript, scenePrompt, writeScript, userScript } from '../src/services/script.js';
 import { clipInput, videoUrlOf } from '../src/services/fal.js';
 
 test('template script has one scene per clip, hook first and offer last', () => {
@@ -38,4 +38,15 @@ test('video url is read from the usual fal output shapes', () => {
   assert.equal(videoUrlOf({ video: { url: 'u1' } }), 'u1');
   assert.equal(videoUrlOf({ videos: [{ url: 'u2' }] }), 'u2');
   assert.equal(videoUrlOf({}), null);
+});
+
+test('an edited script keeps the customer lines and rejects bad ones', () => {
+  const ok = userScript({ scenes: [{ voiceover: ' أهلا   بيكم ' }, { voiceover: 'تاني', visual: 'custom shot' }, { voiceover: 'اطلب' }] }, 3);
+  assert.equal(ok.script.source, 'USER_EDITED');
+  assert.equal(ok.script.scenes[0].voiceover, 'أهلا بيكم');
+  assert.equal(ok.script.scenes[1].visual, 'custom shot');
+  assert.ok(ok.script.scenes[2].visual.length > 10, 'missing visual gets a default');
+  assert.match(userScript({ scenes: [{ voiceover: 'x' }] }, 3).error, /3 مشاهد/);
+  assert.match(userScript({ scenes: [{ voiceover: 'x' }, { voiceover: '' }, { voiceover: 'y' }] }, 3).error, /المشهد 2/);
+  assert.match(userScript({ scenes: [{ voiceover: 'كلمة '.repeat(40) }, { voiceover: 'y' }, { voiceover: 'z' }] }, 3).error, /طويل/);
 });

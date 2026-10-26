@@ -93,4 +93,11 @@ router.get('/videos', asyncRoute(async (req, res) => {
   res.json({ videos: rows.map((j) => ({ ...serialize(j, { admin: true }), user: { name: j.user.name, email: j.user.email } })) });
 }));
 
+router.post('/videos/:id/showcase', asyncRoute(async (req, res) => {
+  const job = await prisma.videoJob.findUnique({ where: { id: idOf(req.params.id) } });
+  if (!job || job.status !== 'COMPLETED') throw new AppError('ينفع تعرض الفيديوهات الجاهزة بس.', 400);
+  const updated = await prisma.videoJob.update({ where: { id: job.id }, data: { showcase: req.body?.on !== false } });
+  res.json({ id: updated.id, showcase: updated.showcase });
+}));
+
 export default router;

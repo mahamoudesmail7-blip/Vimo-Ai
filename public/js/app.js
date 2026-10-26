@@ -1,7 +1,7 @@
 // The customer dashboard: create a video, watch the library fill, top up.
 import { api, esc, $, $$, fmt, fmtDate, toast, shrinkImage, LOGO, STATUS } from '/js/common.js';
 
-const state = { me: null, cfg: null, poll: null, form: { image: null, style: 'UGC', aspectRatio: '9:16', voiceGender: 'MALE' } };
+const state = { me: null, cfg: null, poll: null, form: { image: null, script: null, style: 'UGC', aspectRatio: '9:16', voiceGender: 'MALE' } };
 
 async function init() {
   try { state.me = (await api('GET', '/api/auth/me')).user; }
@@ -60,7 +60,9 @@ async function renderCreate(view) {
         <div class="field"><label>شكل الفيديو</label><div class="choices">${choice('style', 'UGC', 'شخص بيتكلم (UGC)')}${choice('style', 'CINEMATIC', 'سينمائي')}${choice('style', 'SHOWCASE', 'عرض المنتج')}</div></div>
         <div class="field"><label>الصوت</label><div class="choices">${choice('voiceGender', 'MALE', 'صوت راجل')}${choice('voiceGender', 'FEMALE', 'صوت ست')}</div></div>
         <div class="field"><label>المقاس</label><div class="choices">${choice('aspectRatio', '9:16', 'طولي 9:16 (ريلز وتيك توك)')}${choice('aspectRatio', '16:9', 'عرضي 16:9')}</div></div>
+        <div id="scriptBox" class="field ${f.script ? '' : 'hidden'}"></div>
         <div class="err" id="err"></div>
+        <button type="button" class="btn" style="width:100%;margin-bottom:10px" id="preview">✍️ ${f.script ? 'اكتب سكريبت تاني' : 'شوف السكريبت الأول (مجانًا)'}</button>
         <button class="btn primary" style="width:100%" id="go" ${state.cfg.videoReady ? '' : 'disabled'}>🎬 اعمل الفيديو (رصيدك: ${fmt(state.me.credits)})</button>
       </form>
       <div class="card">
@@ -89,6 +91,40 @@ async function renderCreate(view) {
   drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) setImage(e.dataTransfer.files[0]); };
   $$('.choice', view).forEach((b) => { b.onclick = () => { f[b.dataset.name] = b.dataset.value; $$(`.choice[data-name="${b.dataset.name}"]`, view).forEach((x) => x.classList.toggle('active', x === b)); }; });
 
+  const SCENE_LABEL = ['المشهد 1: الـ Hook', 'المشهد 2: المميزات', 'المشهد 3: العرض والطلب'];
+  const renderScript = () => {
+    const box = $('#scriptBox');
+    if (!f.script) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    box.innerHTML = `<label>السكريبت (تقدر تعدّل الكلام)</label>
+      <div class="hint">${f.script.source === 'AI' ? 'كتبه الذكاء الاصطناعي من صورة منتجك.' : 'سكريبت مبدئي، عدّله بكلامك.'} خلي كل مشهد حوالي ${fmt(f.script.maxWords)} كلمة عشان يتقال في ${fmt(f.script.clipSeconds)} ثواني.</div>
+      ${f.script.scenes.map((sc, i) => `<div class="field" style="margin:8px 0 0"><span class="hint">${SCENE_LABEL[i] || `المشهد ${i + 1}`} · <span data-count="${i}"></span></span>
+        <textarea data-scene="${i}" rows="2" style="min-height:60px">${esc(sc.voiceover)}</textarea></div>`).join('')}`;
+    const count = (ta) => { const n = ta.value.trim().split(/\s+/).filter(Boolean).length; const el = $(`[data-count="${ta.dataset.scene}"]`, box); el.textContent = `${fmt(n)} كلمة`; el.style.color = n > f.script.maxWords ? 'var(--warn)' : ''; };
+    $$('textarea[data-scene]', box).forEach((ta) => { count(ta); ta.oninput = () => { f.script.scenes[Number(ta.dataset.scene)].voiceover = ta.value; count(ta); }; });
+  };
+  renderScript();
+  const inputs = () => ({
+    image: f.image, productName: $('#productName').value, description: $('#description').value, offer: $('#offer').value,
+    style: f.style, voiceGender: f.voiceGender, aspectRatio: f.aspectRatio,
+  });
+  ['productName', 'description', 'offer'].forEach((id) => { const el = $(`#${id}`); el.value = f[id] || ''; el.oninput = () => { f[id] = el.value; }; });
+
+  $('#preview').onclick = async () => {
+    const err = $('#err');
+    err.textContent = '';
+    if (!f.image) { err.textContent = 'ارفع صورة المنتج الأول.'; return; }
+    const btn = $('#preview');
+    btn.disabled = true;
+    btn.textContent = 'بنكتب السكريبت…';
+    try {
+      f.script = await api('POST', '/api/videos/script-preview', inputs());
+      renderScript();
+    } catch (e2) { err.textContent = e2.message; }
+    btn.disabled = false;
+    btn.textContent = '✍️ اكتب سكريبت تاني';
+  };
+
   $('#createForm').onsubmit = async (e) => {
     e.preventDefault();
     const err = $('#err');
@@ -99,11 +135,8 @@ async function renderCreate(view) {
     btn.disabled = true;
     btn.textContent = 'بنبدأ…';
     try {
-      await api('POST', '/api/videos', {
-        image: f.image, productName: $('#productName').value, description: $('#description').value, offer: $('#offer').value,
-        style: f.style, voiceGender: f.voiceGender, aspectRatio: f.aspectRatio,
-      });
-      state.form = { image: null, style: f.style, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender };
+      await api('POST', '/api/videos', { ...inputs(), script: f.script ? { scenes: f.script.scenes } : undefined });
+      state.form = { image: null, script: null, style: f.style, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender };
       await refreshMe();
       toast('بدأنا نعمل الفيديو 🎬');
       location.hash = 'videos';
@@ -134,6 +167,7 @@ function videoCard(v) {
         ${v.status === 'FAILED' ? `<div class="muted" style="font-size:13px">${esc(v.error || '')}${v.refunded ? ' — الرصيد رجعلك.' : ''}</div>` : ''}
         ${v.script ? `<details><summary class="muted" style="font-size:14px">السكريبت</summary><ol class="script-lines">${v.script.scenes.map((s) => `<li>${esc(s.voiceover)}</li>`).join('')}</ol></details>` : ''}
         ${v.videoUrl ? `<a class="btn small primary" href="${v.videoUrl}?download=1">⬇️ تحميل الفيديو</a>` : ''}
+        ${['COMPLETED', 'FAILED'].includes(v.status) ? `<button class="btn small" data-remake="${v.id}">🔁 اعمله تاني</button>` : ''}
       </div>
     </div>`;
 }
@@ -145,11 +179,23 @@ async function renderVideos(view) {
       <h1>فيديوهاتي</h1>
       <p class="sub">كل الفيديوهات اللي عملتها. اللي لسه بيتعمل بيتحدث لوحده.</p>
       ${videos.length ? `<div class="videos">${videos.map(videoCard).join('')}</div>` : '<div class="empty">لسه معملتش أي فيديو. <a href="#create">اعمل أول فيديو</a></div>'}`;
+    $$('[data-remake]', view).forEach((b) => { b.onclick = () => remake(b.dataset.remake); });
     const busy = videos.some((v) => !['COMPLETED', 'FAILED'].includes(v.status));
     if (!busy) { clearInterval(state.poll); state.poll = null; refreshMe().catch(() => {}); }
     return busy;
   };
   if (await load()) state.poll = setInterval(() => load().catch(() => {}), 5000);
+}
+
+async function remake(id) {
+  if (state.me.credits < 1) { toast('رصيدك خلص، اشحن باقة الأول.'); location.hash = 'wallet'; return; }
+  if (!confirm('هنعمل فيديو جديد بنفس الصورة والسكريبت، وهيتخصم فيديو من رصيدك. نكمّل؟')) return;
+  try {
+    await api('POST', `/api/videos/${id}/remake`, { sameScript: true });
+    await refreshMe();
+    toast('بدأنا نعمله تاني 🎬');
+    route();
+  } catch (err) { toast(err.message); }
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ import { AppError } from '../errors.js';
 import { applyCredits, refundVideo } from './credits.js';
 import { parseDataUrl, putBuffer, getDataUrl, IMAGE_MIMES } from './storage.js';
 import * as fal from './fal.js';
-import { writeScript, scenePrompt } from './script.js';
+import { writeScript, scenePrompt, userScript, MAX_VOICE_WORDS } from './script.js';
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
 const MAX_CLIP_ATTEMPTS = 2;
@@ -23,37 +23,75 @@ const RATIOS = ['9:16', '16:9'];
 
 const running = new Set();
 
-export async function createVideo(userId, body) {
-  if (!env.falKey()) throw new AppError('توليد الفيديو مش متاح دلوقتي. كلم الدعم.', 503, 'VIDEO_NOT_CONFIGURED');
-
+function readInputs(body) {
   const productName = String(body.productName || '').trim();
   if (productName.length < 2) throw new AppError('اكتب اسم المنتج.');
   if (productName.length > 120) throw new AppError('اسم المنتج طويل جدًا.');
-  const description = String(body.description || '').trim().slice(0, 1500) || null;
-  const offer = String(body.offer || '').trim().slice(0, 200) || null;
-  const style = STYLES.includes(body.style) ? body.style : 'UGC';
-  const aspectRatio = RATIOS.includes(body.aspectRatio) ? body.aspectRatio : '9:16';
-  const voiceGender = body.voiceGender === 'FEMALE' ? 'FEMALE' : 'MALE';
+  return {
+    productName,
+    description: String(body.description || '').trim().slice(0, 1500) || null,
+    offer: String(body.offer || '').trim().slice(0, 200) || null,
+    style: STYLES.includes(body.style) ? body.style : 'UGC',
+    aspectRatio: RATIOS.includes(body.aspectRatio) ? body.aspectRatio : '9:16',
+    voiceGender: body.voiceGender === 'FEMALE' ? 'FEMALE' : 'MALE',
+  };
+}
 
-  const { mime, buffer } = parseDataUrl(body.image);
+function readImage(dataUrl) {
+  const { mime, buffer } = parseDataUrl(dataUrl);
   if (!IMAGE_MIMES.includes(mime)) throw new AppError('الصورة لازم تكون JPG أو PNG أو WEBP.');
   if (buffer.length > env.maxImageBytes()) throw new AppError('الصورة كبيرة جدًا، صغّرها وجرب تاني.');
+  return { mime, buffer, dataUrl };
+}
 
-  const image = await putBuffer(buffer, mime, 'products');
+/** Write the script for the customer to read and edit before paying a credit. */
+export async function previewScript(body) {
+  const inputs = readInputs(body);
+  const image = readImage(body.image);
+  const script = await writeScript({ ...inputs, clipCount: env.defaultClipCount(), imageDataUrl: image.dataUrl });
+  return { ...script, maxWords: MAX_VOICE_WORDS, clipSeconds: env.clipSeconds() };
+}
+
+async function insertJob(userId, inputs, { imageKey, imageMime, script = null }) {
   const job = await prisma.$transaction(async (tx) => {
     const created = await tx.videoJob.create({
       data: {
-        user_id: userId, product_name: productName, description, offer, style, aspect_ratio: aspectRatio,
-        voice_gender: voiceGender, clip_count: env.defaultClipCount(), clip_seconds: env.clipSeconds(),
-        image_key: image.key, image_mime: mime, model: env.videoModel(), charged: true,
+        user_id: userId, product_name: inputs.productName, description: inputs.description, offer: inputs.offer,
+        style: inputs.style, aspect_ratio: inputs.aspectRatio, voice_gender: inputs.voiceGender,
+        clip_count: env.defaultClipCount(), clip_seconds: env.clipSeconds(),
+        image_key: imageKey, image_mime: imageMime, model: env.videoModel(), charged: true,
+        script_json: script ? JSON.stringify(script) : null,
       },
     });
     await applyCredits(tx, userId, -1, 'VIDEO', { ref: `video:${created.id}` });
     return created;
   });
-
   kick();
   return serialize(job);
+}
+
+export async function createVideo(userId, body) {
+  if (!env.falKey()) throw new AppError('توليد الفيديو مش متاح دلوقتي. كلم الدعم.', 503, 'VIDEO_NOT_CONFIGURED');
+  const inputs = readInputs(body);
+  let script = null;
+  if (body.script) {
+    const checked = userScript(body.script, env.defaultClipCount());
+    if (checked.error) throw new AppError(checked.error);
+    script = checked.script;
+  }
+  const image = readImage(body.image);
+  const stored = await putBuffer(image.buffer, image.mime, 'products');
+  return insertJob(userId, inputs, { imageKey: stored.key, imageMime: image.mime, script });
+}
+
+/** Same photo and inputs, a new render. `sameScript` keeps the spoken lines. */
+export async function remakeVideo(userId, sourceId, { sameScript = true } = {}) {
+  if (!env.falKey()) throw new AppError('توليد الفيديو مش متاح دلوقتي. كلم الدعم.', 503, 'VIDEO_NOT_CONFIGURED');
+  const src = await prisma.videoJob.findUnique({ where: { id: sourceId } });
+  if (!src || src.user_id !== userId) throw new AppError('الفيديو مش موجود.', 404, 'NOT_FOUND');
+  const inputs = { productName: src.product_name, description: src.description, offer: src.offer, style: src.style, aspectRatio: src.aspect_ratio, voiceGender: src.voice_gender };
+  const script = sameScript ? parse(src.script_json) : null;
+  return insertJob(userId, inputs, { imageKey: src.image_key, imageMime: src.image_mime, script: script?.scenes?.length === env.defaultClipCount() ? script : null });
 }
 
 export function serialize(job, { admin = false } = {}) {
@@ -75,6 +113,7 @@ export function serialize(job, { admin = false } = {}) {
     imageUrl: `/api/videos/${job.id}/image`,
     videoUrl: job.status === 'COMPLETED' ? `/api/videos/${job.id}/video` : null,
     refunded: job.refunded,
+    showcase: job.showcase,
     createdAt: job.created_at,
     finishedAt: job.finished_at,
     ...(admin ? { userId: job.user_id, model: job.model, clips: parse(job.clips_json), merge: parse(job.merge_json) } : {}),

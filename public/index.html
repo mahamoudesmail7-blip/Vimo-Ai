@@ -50,6 +50,14 @@
     </div>
   </section>
 
+  <section id="showcase" class="hidden">
+    <div class="wrap">
+      <h2>شوف شغلنا</h2>
+      <p class="lead">فيديوهات حقيقية اتعملت على Vimo AI، من صورة لفيديو في دقايق.</p>
+      <div class="videos" id="gallery"></div>
+    </div>
+  </section>
+
   <section id="pricing">
     <div class="wrap">
       <h2>سعر لا يُصدّق</h2>
@@ -83,6 +91,13 @@
   import { api, esc, fmt, LOGO } from '/js/common.js';
   document.getElementById('brand').innerHTML = LOGO;
   document.getElementById('year').textContent = new Date().getFullYear();
+  api('GET', '/api/showcase').then(({ videos }) => {
+    if (!videos.length) return;
+    document.getElementById('gallery').innerHTML = videos.map((v) => `
+      <div class="vcard"><div class="media ${v.aspectRatio === '16:9' ? 'wide' : ''}"><video src="${v.videoUrl}" poster="${v.imageUrl}" controls playsinline preload="none"></video></div>
+      <div class="body"><div class="title">${esc(v.productName)}</div></div></div>`).join('');
+    document.getElementById('showcase').classList.remove('hidden');
+  }).catch(() => {});
   const cfg = await api('GET', '/api/config').catch(() => null);
   if (cfg) {
     document.getElementById('secs').textContent = cfg.videoSeconds;

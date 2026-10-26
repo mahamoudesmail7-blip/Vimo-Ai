@@ -10,6 +10,7 @@ import authRoutes from './routes/auth.js';
 import videoRoutes from './routes/videos.js';
 import walletRoutes from './routes/wallet.js';
 import adminRoutes from './routes/admin.js';
+import showcaseRoutes from './routes/showcase.js';
 import { startWorker } from './services/videoJob.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -27,6 +28,7 @@ export function createApp() {
   app.use('/api/videos', videoRoutes);
   app.use('/api/wallet', walletRoutes);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/showcase', showcaseRoutes);
   app.use('/api', (req, res) => res.status(404).json({ error: 'NOT_FOUND', message: 'المسار مش موجود.' }));
 
   app.use(express.static(path.join(here, '..', 'public'), { extensions: ['html'] }));

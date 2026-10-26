@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { AppError, asyncRoute } from '../errors.js';
 import { requireAuth } from '../auth.js';
-import { createVideo, serialize } from '../services/videoJob.js';
+import rateLimit from 'express-rate-limit';
+import { createVideo, previewScript, remakeVideo, serialize } from '../services/videoJob.js';
 import { getBlob, sendBlob } from '../services/storage.js';
 
 const router = Router();
@@ -24,6 +25,17 @@ router.get('/', asyncRoute(async (req, res) => {
 
 router.post('/', asyncRoute(async (req, res) => {
   res.status(201).json(await createVideo(req.user.id, req.body || {}));
+}));
+
+// Free to the customer but not to us (a vision-model call), so it is capped per account.
+const previewLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, limit: 30, keyGenerator: (req) => `u${req.user.id}`, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'RATE_LIMIT', message: 'جربت سكريبتات كتير، استنى شوية وجرب تاني.' },
+});
+router.post('/script-preview', previewLimit, asyncRoute(async (req, res) => res.json(await previewScript(req.body || {}))));
+
+router.post('/:id/remake', asyncRoute(async (req, res) => {
+  res.status(201).json(await remakeVideo(req.user.id, idOf(req.params.id), { sameScript: req.body?.sameScript !== false }));
 }));
 
 router.get('/:id', asyncRoute(async (req, res) => res.json(serialize(await findOwned(req)))));

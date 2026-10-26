@@ -12,7 +12,7 @@ const STYLE_DIRECTION = {
   CINEMATIC: 'Premium cinematic product commercial: smooth slow camera moves, soft studio lighting, shallow depth of field, elegant setting.',
   SHOWCASE: 'Clean product showcase: the product on a tidy surface, close-up details, slow orbit and push-in shots, bright even lighting.',
 };
-const MAX_VOICE_WORDS = 20; // ~8 seconds of natural Egyptian speech
+export const MAX_VOICE_WORDS = 20; // ~8 seconds of natural Egyptian speech
 
 let fetchImpl = (...args) => fetch(...args);
 export function setFetch(fn) { fetchImpl = fn || ((...args) => fetch(...args)); }
@@ -44,6 +44,35 @@ function normalize(data, clipCount) {
   }));
   if (out.some((s) => !s.visual || !s.voiceover)) return null;
   return { hook: String(data.hook || out[0].voiceover), cta: String(data.cta || out[out.length - 1].voiceover), scenes: out, source: 'AI' };
+}
+
+const GENERIC_VISUAL = [
+  'The person holds the product up to the camera with an excited, surprised face.',
+  'The person uses the product naturally and shows its details to the camera.',
+  'The person points at the product and smiles at the camera, inviting viewers to order.',
+];
+
+/**
+ * A script the customer previewed and edited. Their spoken lines win; the
+ * visual directions from the preview are kept when they were sent back.
+ * Returns { script } or { error } (Arabic, shown to the customer).
+ */
+export function userScript(input, clipCount) {
+  const scenes = Array.isArray(input?.scenes) ? input.scenes : [];
+  if (scenes.length !== clipCount) return { error: `السكريبت لازم يكون ${clipCount} مشاهد.` };
+  const out = [];
+  for (const [i, s] of scenes.entries()) {
+    const voiceover = String(s?.voiceover || '').trim().replace(/\s+/g, ' ');
+    if (!voiceover) return { error: `اكتب كلام المشهد ${i + 1}.` };
+    if (voiceover.split(' ').length > MAX_VOICE_WORDS + 5) return { error: `كلام المشهد ${i + 1} طويل على ${env.clipSeconds()} ثواني، خليه أقصر.` };
+    const last = i === scenes.length - 1 && i > 0;
+    out.push({
+      camera: String(s?.camera || '').slice(0, 120) || 'medium shot',
+      visual: String(s?.visual || '').slice(0, 600) || GENERIC_VISUAL[last ? 2 : Math.min(i, 1)],
+      voiceover,
+    });
+  }
+  return { script: { hook: out[0].voiceover, cta: out[out.length - 1].voiceover, scenes: out, source: 'USER_EDITED' } };
 }
 
 export async function writeScript({ productName, description, offer, style, voiceGender, clipCount, imageDataUrl }) {
