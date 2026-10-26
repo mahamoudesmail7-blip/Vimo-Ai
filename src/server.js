@@ -12,6 +12,7 @@ import walletRoutes from './routes/wallet.js';
 import adminRoutes from './routes/admin.js';
 import showcaseRoutes from './routes/showcase.js';
 import { startWorker } from './services/videoJob.js';
+import { prisma } from './db.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +42,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!env.jwtSecret()) {
     console.error('JWT_SECRET is required in production.');
     process.exit(1);
+  }
+  if (env.adminEmails().length) {
+    const { count } = await prisma.user.updateMany({ where: { email: { in: env.adminEmails() }, role: { not: 'ADMIN' } }, data: { role: 'ADMIN' } });
+    if (count) console.log(`Promoted ${count} account(s) from ADMIN_EMAILS to admin.`);
   }
   createApp().listen(env.port(), () => console.log(`Vimo AI listening on http://localhost:${env.port()}`));
   startWorker();

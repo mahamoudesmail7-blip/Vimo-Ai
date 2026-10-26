@@ -35,6 +35,8 @@ export const env = {
   signupBonusCredits: () => num(process.env.VIMO_SIGNUP_BONUS, 0),
   vodafoneCashNumber: () => clean(process.env.VODAFONE_CASH_NUMBER) || '01113878767',
   supportWhatsapp: () => clean(process.env.SUPPORT_WHATSAPP),
+  // Accounts with these emails are admins (on signup, and promoted at boot).
+  adminEmails: () => clean(process.env.ADMIN_EMAILS).toLowerCase().split(/[,\s]+/).filter(Boolean),
 };
 
 // Packages = the EasyVideos price list. Override with VIMO_PACKAGES as JSON:

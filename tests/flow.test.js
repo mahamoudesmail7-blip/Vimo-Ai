@@ -9,6 +9,7 @@ process.env.DATABASE_URL = DB || process.env.DATABASE_URL;
 process.env.FAL_KEY = 'test-key';
 process.env.OPENAI_API_KEY = '';
 process.env.VIMO_DISABLE_AUTOKICK = '1';
+process.env.ADMIN_EMAILS = 'boss@test.dev';
 
 const skip = !DB && 'TEST_DATABASE_URL not set';
 let server, base, prisma, fal, processDueJobs;
@@ -90,8 +91,8 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   r = await user('POST', `/api/admin/topups/${topupId}/approve`, {});
   assert.equal(r.status, 403, 'a user cannot approve their own top-up');
 
-  await admin('POST', '/api/auth/signup', { name: 'Boss', email: 'boss@test.dev', password: 'secret123' });
-  await prisma.user.update({ where: { email: 'boss@test.dev' }, data: { role: 'ADMIN' } });
+  r = await admin('POST', '/api/auth/signup', { name: 'Boss', email: 'Boss@Test.dev', password: 'secret123' });
+  assert.equal(r.data.user.role, 'ADMIN', 'an ADMIN_EMAILS signup is an admin');
   r = await admin('POST', `/api/admin/topups/${topupId}/approve`, {});
   assert.equal(r.status, 200);
   r = await admin('POST', `/api/admin/topups/${topupId}/approve`, {});

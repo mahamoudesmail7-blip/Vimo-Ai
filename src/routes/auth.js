@@ -22,7 +22,8 @@ router.post('/signup', limiter, asyncRoute(async (req, res) => {
   const body = signupSchema.parse(req.body || {});
   if (await prisma.user.findUnique({ where: { email: body.email } })) throw new AppError('الإيميل ده عليه حساب بالفعل، سجّل دخول.', 409, 'EMAIL_TAKEN');
   const user = await prisma.$transaction(async (tx) => {
-    const u = await tx.user.create({ data: { name: body.name, email: body.email, phone: body.phone || null, password_hash: await bcrypt.hash(body.password, 10) } });
+    const role = env.adminEmails().includes(body.email) ? 'ADMIN' : 'USER';
+    const u = await tx.user.create({ data: { name: body.name, email: body.email, phone: body.phone || null, role, password_hash: await bcrypt.hash(body.password, 10) } });
     if (env.signupBonusCredits() > 0) await applyCredits(tx, u.id, env.signupBonusCredits(), 'SIGNUP_BONUS');
     return tx.user.findUnique({ where: { id: u.id } });
   });
