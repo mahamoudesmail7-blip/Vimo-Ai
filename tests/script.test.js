@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { templateScript, scenePrompt, writeScript, userScript } from '../src/services/script.js';
-import { clipInput, videoUrlOf } from '../src/services/fal.js';
+import { templateScript, scenePrompt, keyframePrompt, writeScript, userScript } from '../src/services/script.js';
+import { clipInput, videoUrlOf, imageUrlOf, setFetch } from '../src/services/fal.js';
 
 test('template script has one scene per clip, hook first and offer last', () => {
   for (const clipCount of [1, 2, 3, 4]) {
@@ -30,8 +30,10 @@ test('scene prompt carries the Egyptian line, the speaker and the product lock',
 });
 
 test('Veo clip input asks for an 8s clip with sound', () => {
-  const input = clipInput('fal-ai/veo3/fast/image-to-video', { prompt: 'x', imageUrl: 'data:image/png;base64,AA', aspectRatio: '9:16', seconds: 8 });
+  const input = clipInput('fal-ai/veo3/fast/image-to-video', { prompt: 'x', imageUrl: 'data:image/png;base64,AA', aspectRatio: '9:16', seconds: 8, negativePrompt: 'n' });
   assert.deepEqual({ d: input.duration, a: input.generate_audio, r: input.aspect_ratio }, { d: '8s', a: true, r: '9:16' });
+  assert.equal(input.negative_prompt, undefined, 'Veo 3 has no negative prompt');
+  assert.equal(clipInput('fal-ai/veo3.1/fast/image-to-video', { prompt: 'x', imageUrl: 'u', aspectRatio: '9:16', seconds: 8, negativePrompt: 'n' }).negative_prompt, 'n');
 });
 
 test('video url is read from the usual fal output shapes', () => {
@@ -58,4 +60,47 @@ test('template lines are long enough for an 8s clip and drop emoji', () => {
     assert.ok(words >= 12 && words <= 20, `${words} words: ${scene.voiceover}`);
     assert.doesNotMatch(scene.voiceover, /\p{Extended_Pictographic}/u);
   }
+});
+
+test('the script is written by a vision LLM on fal when there is no OpenAI key', async () => {
+  process.env.OPENAI_API_KEY = '';
+  process.env.FAL_KEY = 'k';
+  let sent;
+  setFetch(async (url, opts) => {
+    sent = { url, body: JSON.parse(opts.body) };
+    const reply = '```json\n' + JSON.stringify({
+      product: { what: 'anti-choking device', usage: 'mask pressed over mouth and nose, plunger pulled', details: 'grey cylinder, orange handles, clear mask' },
+      hook: 'h', cta: 'c',
+      scenes: [1, 2, 3].map((i) => ({ camera: 'cu', visual: `frame ${i}`, motion: `move ${i}`, voiceover: `سطر ${i}` })),
+    }) + '\n```';
+    return new Response(JSON.stringify({ output: reply }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  try {
+    const s = await writeScript({ productName: 'جهاز', clipCount: 3, style: 'UGC', voiceGender: 'MALE', imageDataUrl: 'data:image/png;base64,AA' });
+    assert.equal(sent.url, 'https://fal.run/openrouter/router/vision');
+    assert.deepEqual(sent.body.image_urls, ['data:image/png;base64,AA']);
+    assert.match(sent.body.prompt, /how it is physically held and used/);
+    assert.equal(s.source, 'AI');
+    assert.equal(s.product.usage, 'mask pressed over mouth and nose, plunger pulled');
+    assert.deepEqual(s.scenes.map((x) => x.motion), ['move 1', 'move 2', 'move 3']);
+  } finally {
+    setFetch(null);
+    process.env.FAL_KEY = '';
+  }
+});
+
+test('first-frame prompt locks the product and says how it is used', () => {
+  const p = keyframePrompt({ visual: 'A man in a kitchen.' }, { product: { usage: 'held in the right hand', details: 'grey cylinder' }, style: 'UGC', voiceGender: 'MALE', aspectRatio: '9:16' });
+  assert.match(p, /A man in a kitchen\./);
+  assert.match(p, /EXACTLY as it is/);
+  assert.match(p, /held in the right hand/);
+  assert.match(p, /grey cylinder/);
+  assert.match(p, /Vertical 9:16/);
+  assert.equal(imageUrlOf({ images: [{ url: 'i1' }] }), 'i1');
+});
+
+test('an edited script keeps the motion and product notes from the preview', () => {
+  const { script } = userScript({ product: { usage: 'u', details: 'd' }, scenes: [1, 2, 3].map((i) => ({ voiceover: `سطر ${i}`, visual: `v${i}`, motion: `m${i}` })) }, 3);
+  assert.deepEqual(script.scenes.map((s) => s.motion), ['m1', 'm2', 'm3']);
+  assert.equal(script.product.usage, 'u');
 });

@@ -18,6 +18,7 @@ let server, base, prisma, fal, processDueJobs;
 const fake = { submitted: [], polls: {}, failClips: false, mergeInputs: [] };
 async function fakeFetch(url, opts = {}) {
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  if (url.startsWith('https://fal.run/')) return json(500, { detail: 'no LLM in tests' }); // script falls back to the template
   if (opts.method === 'POST' && url.startsWith('https://queue.fal.run/')) {
     const id = `req${fake.submitted.length + 1}`;
     const body = JSON.parse(opts.body);
@@ -31,6 +32,7 @@ async function fakeFetch(url, opts = {}) {
   if (rs) {
     const sub = fake.submitted.find((s) => s.id === rs[1]);
     if (!sub.body.video_urls && fake.failClips) return json(422, { detail: 'content policy' });
+    if (sub.body.image_urls) return json(200, { images: [{ url: `https://cdn.fake/${rs[1]}.jpg` }] });
     return json(200, { video: { url: `https://cdn.fake/${rs[1]}.mp4` } });
   }
   if (url.startsWith('https://cdn.fake/')) return new Response(Buffer.from('FAKE-MP4-BYTES-0123456789'), { status: 200 });
@@ -106,9 +108,13 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   assert.equal(r.status, 201);
   const ok = await settle(r.data.id);
   assert.equal(ok.status, 'COMPLETED', ok.error);
-  const clipSubs = fake.submitted.filter((s) => !s.body.video_urls);
+  const frameSubs = fake.submitted.filter((s) => s.body.image_urls);
+  assert.equal(frameSubs.length, 3, 'a first frame per scene');
+  assert.ok(frameSubs.every((s) => s.model === 'fal-ai/nano-banana-pro/edit' && s.body.image_urls[0].startsWith('data:image/png') && s.body.aspect_ratio === '9:16'));
+  const clipSubs = fake.submitted.filter((s) => s.body.image_url);
   assert.equal(clipSubs.length, 3, 'three clips');
-  assert.ok(clipSubs.every((s) => s.body.image_url.startsWith('data:image/png') && s.body.duration === '8s'));
+  assert.ok(clipSubs.every((s) => /^https:\/\/cdn\.fake\/req\d+\.jpg$/.test(s.body.image_url) && s.body.duration === '8s'), 'each clip starts from its first frame');
+  assert.ok(clipSubs.every((s) => s.model === 'fal-ai/veo3.1/fast/image-to-video' && s.body.negative_prompt));
   assert.equal(fake.mergeInputs.at(-1).length, 3, 'merged three clips');
 
   r = await user('GET', `/api/videos/${ok.id}/video`, null, { Range: 'bytes=0-3' });
@@ -124,13 +130,15 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   r = await stranger('GET', `/api/videos/${ok.id}/video`);
   assert.equal(r.status, 404);
 
-  // failure path: every clip is rejected -> each is retried once, then FAILED + refund
+  // failure path: every frame and clip is rejected -> frames fall back to the
+  // product photo, each clip is retried once, then FAILED + refund
   fake.failClips = true;
   r = await user('POST', '/api/videos', { productName: 'ساعة', image: PNG });
   const bad = await settle(r.data.id);
   fake.failClips = false;
   assert.equal(bad.status, 'FAILED');
   assert.match(bad.error, /content policy/);
+  assert.ok(JSON.parse(bad.clips_json).every((c) => c.frame.status === 'SKIPPED'), 'a failed first frame does not fail the video by itself');
   assert.ok(bad.refunded);
   r = await user('GET', '/api/auth/me');
   assert.equal(r.data.user.credits, 2, '3 - 1 used - 1 spent then refunded');
@@ -157,7 +165,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   assert.equal(r.status, 201);
   const mine = await settle(r.data.id);
   assert.equal(mine.status, 'COMPLETED');
-  const prompts = fake.submitted.slice(before).filter((x) => !x.body.video_urls).map((x) => x.body.prompt);
+  const prompts = fake.submitted.slice(before).filter((x) => x.body.image_url).map((x) => x.body.prompt);
   assert.ok(edited.every((e, i) => prompts[i].includes(e.voiceover)), 'each clip speaks the edited line');
   assert.equal(JSON.parse(mine.script_json).source, 'USER_EDITED');
 

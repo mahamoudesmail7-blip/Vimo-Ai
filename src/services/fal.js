@@ -6,6 +6,7 @@
 import { env } from '../config.js';
 
 const QUEUE_BASE = 'https://queue.fal.run';
+const RUN_BASE = 'https://fal.run';
 const TIMEOUT_MS = 60000;
 
 export class FalError extends Error {
@@ -20,11 +21,11 @@ export class FalError extends Error {
 let fetchImpl = (...args) => fetch(...args);
 export function setFetch(fn) { fetchImpl = fn || ((...args) => fetch(...args)); }
 
-async function call(method, url, body) {
+async function call(method, url, body, timeoutMs = TIMEOUT_MS) {
   const key = env.falKey();
   if (!key) throw new FalError('مفتاح fal.ai مش متظبط (FAL_KEY).', 'NOT_CONFIGURED');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res;
   try {
     res = await fetchImpl(url, {
@@ -59,6 +60,11 @@ export async function submit(modelId, input) {
   };
 }
 
+/** Run a fast model (an LLM) and wait for its output in the same request. */
+export async function run(modelId, input, timeoutMs = 120000) {
+  return call('POST', `${RUN_BASE}/${modelId}`, input, timeoutMs);
+}
+
 /** 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' */
 export async function status(statusUrl) {
   const data = await call('GET', statusUrl);
@@ -75,6 +81,11 @@ export function videoUrlOf(output) {
   return output?.video?.url || output?.videos?.[0]?.url || output?.output?.video?.url || null;
 }
 
+/** Pull the first image URL out of an image model output ({ images: [{ url }] }). */
+export function imageUrlOf(output) {
+  return output?.images?.[0]?.url || output?.image?.url || null;
+}
+
 export async function download(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5 * TIMEOUT_MS);
@@ -88,11 +99,20 @@ export async function download(url) {
 }
 
 /**
+ * Input body for one scene's first frame: an image-edit model places the
+ * product photo into a realistic scene, so the video starts from a real-looking
+ * shot that already contains the exact product.
+ */
+export function keyframeInput({ prompt, imageUrl, aspectRatio }) {
+  return { prompt, image_urls: [imageUrl], aspect_ratio: aspectRatio, resolution: '2K', output_format: 'jpeg', num_images: 1 };
+}
+
+/**
  * Input body for one clip. Veo models take `duration: "8s"` and make sound;
  * Kling-style models take a bare number of seconds. Anything else gets the
  * common fields only.
  */
-export function clipInput(modelId, { prompt, imageUrl, aspectRatio, seconds }) {
+export function clipInput(modelId, { prompt, imageUrl, aspectRatio, seconds, negativePrompt }) {
   if (/veo/i.test(modelId)) {
     return {
       prompt,
@@ -101,6 +121,7 @@ export function clipInput(modelId, { prompt, imageUrl, aspectRatio, seconds }) {
       duration: `${seconds}s`,
       generate_audio: true,
       resolution: env.videoResolution(),
+      ...(negativePrompt && /veo3\.1/i.test(modelId) ? { negative_prompt: negativePrompt } : {}),
     };
   }
   if (/kling/i.test(modelId)) {

@@ -97,7 +97,7 @@ model VideoJob {
   image_mime String @default("image/jpeg")
 
   script_json String? // { hook, cta, scenes:[{camera, visual, voiceover}], source }
-  clips_json  String? // [{ index, prompt, requestId, statusUrl, responseUrl, status, attempts, videoUrl, error }]
+  clips_json  String? // [{ index, prompt, frame?: { prompt, status, url, ... }, requestId, statusUrl, responseUrl, status, attempts, videoUrl, error }]
   merge_json  String? // { requestId, statusUrl, responseUrl, status, videoUrl }
   model       String?
   status      String  @default("QUEUED")

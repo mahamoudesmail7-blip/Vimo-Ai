@@ -1,17 +1,22 @@
-// The ad script: N scenes (one per clip), each with an English visual
-// direction for the video model and a short Egyptian-Arabic line spoken in
-// it. Scene 1 is the hook, the last scene is the offer + call to action.
+// The ad script: N scenes (one per clip). Each scene has an English first-frame
+// description (`visual`, turned into a realistic photo with the exact product),
+// what moves during the clip (`motion`), and a short Egyptian-Arabic line
+// spoken in it. Scene 1 is the hook, the last scene is the offer + call to action.
 //
-// With OPENAI_API_KEY the script is written by a vision model that looks at
-// the product photo. Without it (or if the call fails) a template script is
-// used, so a video can always be made.
+// The script is written by a vision LLM that first studies the product photo
+// (what it is, how it is held and used, its exact look): OpenAI when
+// OPENAI_API_KEY is set, otherwise an LLM on fal with the same FAL_KEY. If that
+// fails a template script is used, so a video can always be made.
 import { env } from '../config.js';
+import * as fal from './fal.js';
 
 const STYLE_DIRECTION = {
   UGC: 'Authentic user-generated-content look: filmed on a smartphone, handheld, natural home lighting, a real Egyptian person talking to the camera like a TikTok review.',
-  CINEMATIC: 'Premium cinematic product commercial: smooth slow camera moves, soft studio lighting, shallow depth of field, elegant setting.',
-  SHOWCASE: 'Clean product showcase: the product on a tidy surface, close-up details, slow orbit and push-in shots, bright even lighting.',
+  CINEMATIC: 'Premium cinematic product commercial: smooth slow camera moves, soft natural light, shallow depth of field, an elegant real Egyptian home or street setting.',
+  SHOWCASE: 'Clean product showcase: the product on a tidy real surface, close-up details, slow push-in shots, bright even lighting, a person only as hands or in the background.',
 };
+
+const NEGATIVE = 'product changes shape, product morphing, melting, warped or extra parts, different colors, changed or misspelled logo, distorted hands, extra fingers, cartoon, 3D render, CGI, plastic skin, on-screen text, subtitles, captions, watermark';
 export const MAX_VOICE_WORDS = 20; // ~8 seconds of natural Egyptian speech
 
 let fetchImpl = (...args) => fetch(...args);
@@ -28,9 +33,9 @@ export function templateScript({ productName, description, offer, clipCount }) {
   const benefit = trimWords(clean(String(description || '').split(/[.\n،,]/)[0]) || `${name} هيفرق معاك`, 9);
   const say = (t) => trimWords(t, MAX_VOICE_WORDS);
   const lines = [
-    { camera: 'close-up, handheld', visual: `A person holds the product up to the camera with a surprised, excited face.`, voiceover: say(`بجد مش مصدق إن ${name} بالشكل ده! أول ما جربته فهمت الناس بتتكلم عنه ليه.`) },
-    { camera: 'medium shot, slow push-in', visual: 'The person uses the product naturally and shows its details to the camera.', voiceover: say(`${benefit}، وكمان سهل في الاستخدام وشكله حلو، وده اللي خلاني أحبه.`) },
-    { camera: 'close-up on product, then person smiling', visual: 'The person points at the product and smiles at the camera, inviting viewers to order.', voiceover: offer ? say(`${trimWords(clean(offer), 6)} ، والتوصيل لحد باب البيت والدفع عند الاستلام، اطلبه دلوقتي قبل ما الكمية تخلص!`) : 'اطلبه دلوقتي والتوصيل لحد باب البيت والدفع عند الاستلام، الحق قبل ما الكمية تخلص!' },
+    { camera: 'close-up, handheld', visual: 'A person in a real Egyptian living room holds the product up next to their face toward the phone camera, looking surprised and excited.', motion: 'The person talks to the camera with natural small head movements; the camera is handheld with slight sway.', voiceover: say(`بجد مش مصدق إن ${name} بالشكل ده! أول ما جربته فهمت الناس بتتكلم عنه ليه.`) },
+    { camera: 'medium shot, slow push-in', visual: 'Medium shot: the person uses the product the way it is meant to be used, the product clearly visible in their hands.', motion: 'The person uses the product slowly and naturally while talking; slow push-in.', voiceover: say(`${benefit}، وكمان سهل في الاستخدام وشكله حلو، وده اللي خلاني أحبه.`) },
+    { camera: 'close-up on product, then person smiling', visual: 'Close-up: the person holds the product toward the camera and smiles, warm natural light.', motion: 'The person nods and smiles while talking to the camera; the product stays still in frame.', voiceover: offer ? say(`${trimWords(clean(offer), 6)} ، والتوصيل لحد باب البيت والدفع عند الاستلام، اطلبه دلوقتي قبل ما الكمية تخلص!`) : 'اطلبه دلوقتي والتوصيل لحد باب البيت والدفع عند الاستلام، الحق قبل ما الكمية تخلص!' },
   ];
   const scenes = clipCount === 1 ? [lines[0]] : clipCount === 2 ? [lines[0], lines[2]] : lines.slice(0, 2).concat(Array(Math.max(0, clipCount - 3)).fill(lines[1]), [lines[2]]);
   return { hook: scenes[0].voiceover, cta: scenes[scenes.length - 1].voiceover, scenes, source: 'TEMPLATE' };
@@ -40,23 +45,37 @@ function normalize(data, clipCount) {
   const scenes = Array.isArray(data?.scenes) ? data.scenes : [];
   if (scenes.length < clipCount) return null;
   const out = scenes.slice(0, clipCount).map((s) => ({
-    camera: String(s.camera || '').slice(0, 120),
-    visual: String(s.visual || '').slice(0, 600),
+    camera: String(s.camera || '').slice(0, 160),
+    visual: String(s.visual || '').slice(0, 900),
+    motion: String(s.motion || '').slice(0, 500),
     voiceover: trimWords(s.voiceover, MAX_VOICE_WORDS),
   }));
   if (out.some((s) => !s.visual || !s.voiceover)) return null;
-  return { hook: String(data.hook || out[0].voiceover), cta: String(data.cta || out[out.length - 1].voiceover), scenes: out, source: 'AI' };
+  return {
+    product: readProduct(data.product),
+    hook: String(data.hook || out[0].voiceover),
+    cta: String(data.cta || out[out.length - 1].voiceover),
+    scenes: out,
+    source: 'AI',
+  };
+}
+
+function readProduct(p) {
+  if (!p || typeof p !== 'object') return null;
+  const pick = (k) => String(p[k] || '').slice(0, 600);
+  return { what: pick('what'), usage: pick('usage'), details: pick('details') };
 }
 
 const GENERIC_VISUAL = [
-  'The person holds the product up to the camera with an excited, surprised face.',
-  'The person uses the product naturally and shows its details to the camera.',
-  'The person points at the product and smiles at the camera, inviting viewers to order.',
+  'A person in a real Egyptian living room holds the product up next to their face toward the phone camera, looking surprised and excited.',
+  'Medium shot: the person uses the product the way it is meant to be used, the product clearly visible in their hands.',
+  'Close-up: the person holds the product toward the camera and smiles, warm natural light.',
 ];
 
 /**
  * A script the customer previewed and edited. Their spoken lines win; the
- * visual directions from the preview are kept when they were sent back.
+ * visual directions and product notes from the preview are kept when they
+ * were sent back.
  * Returns { script } or { error } (Arabic, shown to the customer).
  */
 export function userScript(input, clipCount) {
@@ -69,51 +88,102 @@ export function userScript(input, clipCount) {
     if (voiceover.split(' ').length > MAX_VOICE_WORDS + 5) return { error: `كلام المشهد ${i + 1} طويل على ${env.clipSeconds()} ثواني، خليه أقصر.` };
     const last = i === scenes.length - 1 && i > 0;
     out.push({
-      camera: String(s?.camera || '').slice(0, 120) || 'medium shot',
-      visual: String(s?.visual || '').slice(0, 600) || GENERIC_VISUAL[last ? 2 : Math.min(i, 1)],
+      camera: String(s?.camera || '').slice(0, 160) || 'medium shot',
+      visual: String(s?.visual || '').slice(0, 900) || GENERIC_VISUAL[last ? 2 : Math.min(i, 1)],
+      motion: String(s?.motion || '').slice(0, 500),
       voiceover,
     });
   }
-  return { script: { hook: out[0].voiceover, cta: out[out.length - 1].voiceover, scenes: out, source: 'USER_EDITED' } };
+  return { script: { product: readProduct(input.product), hook: out[0].voiceover, cta: out[out.length - 1].voiceover, scenes: out, source: 'USER_EDITED' } };
+}
+
+const SYSTEM = [
+  'You are the best direct-response creative director in Egypt. You make UGC video ads for TikTok, Reels and Facebook that stop the scroll and sell, and you direct realistic, believable footage.',
+  'You write spoken lines the way real Egyptians talk (عامية مصرية), never formal Arabic and never translated-sounding.',
+  'You reply with one JSON object only, no markdown.',
+].join(' ');
+
+function scriptRequest({ productName, description, offer, style, voiceGender, clipCount }) {
+  const speaker = voiceGender === 'FEMALE' ? 'a young Egyptian woman (around 25-35)' : 'a young Egyptian man (around 25-35)';
+  return [
+    `Product name: ${productName}`,
+    description ? `Seller's description: ${description}` : '',
+    offer ? `Offer / price (must be said in the last scene): ${offer}` : '',
+    `Ad style: ${STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC}`,
+    `Speaker: ${speaker}.`,
+    '',
+    'STEP 1. Study the attached product photo closely before writing anything:',
+    '- what the product really is and what problem it solves;',
+    '- exactly how it is physically held and used (which hand, which part touches the body or the object, its size compared to a hand);',
+    '- its exact look: shape, proportions, colors, materials, every visible part, logo and label text.',
+    '',
+    `STEP 2. Write a ${clipCount}-scene ad. Each scene is ONE ${env.clipSeconds()}-second clip.`,
+    '- Scene 1 is the hook: in the first 2 seconds hit a real pain, fear or desire of the buyer, or say something surprising. It must make an Egyptian stop scrolling.',
+    '- Middle scene(s): show the product being used correctly and give ONE concrete benefit with a feeling or a quick proof (a before/after moment, a reaction).',
+    '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt).',
+    '',
+    'Rules for "voiceover" (the line the speaker says on camera):',
+    `- Egyptian colloquial, warm and natural, like a friend recommending it. ${Math.max(12, MAX_VOICE_WORDS - 6)} to ${MAX_VOICE_WORDS} words, so it fills ${env.clipSeconds()} seconds.`,
+    '- Specific to THIS product (use what you saw in the photo), no generic filler, do not repeat the product name in every line.',
+    '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
+    '',
+    'Rules for "visual" (the first frame, in English, max 90 words). It becomes a real photo made from the product photo, so:',
+    '- describe ONE photorealistic smartphone-camera frame: a real Egyptian setting, the speaker, framing, light;',
+    '- the product appears exactly as in the photo, fully visible, at real-world size, held or used correctly as found in STEP 1;',
+    '- no text, no logos other than the product\'s own, no other products.',
+    '',
+    'Rules for "motion" (in English, max 50 words): what moves during the clip. Keep it simple and physically plausible: the speaker talks to the camera with natural gestures, small hand moves, a slow camera push or handheld sway. The product stays rigid and identical; it never transforms, opens or changes unless that is how it is really used.',
+    '',
+    'Return exactly this JSON shape:',
+    '{"product": {"what": string, "usage": string, "details": string}, "hook": string, "cta": string, "scenes": [{"camera": string, "visual": string, "motion": string, "voiceover": string}]}',
+    '"product" is in English: "usage" = how it is held and used, "details" = its exact look.',
+  ].filter((l) => l !== null).join('\n');
+}
+
+function parseJsonObject(text) {
+  const raw = String(text || '');
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('no JSON in the model reply');
+  return JSON.parse(raw.slice(start, end + 1));
+}
+
+async function askOpenAi(key, user, imageDataUrl) {
+  const content = [{ type: 'text', text: user }];
+  if (imageDataUrl) content.push({ type: 'image_url', image_url: { url: imageDataUrl } });
+  const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: env.openAiModel(),
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content }],
+    }),
+  });
+  if (!res.ok) throw new Error(`OpenAI ${res.status}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content;
+}
+
+async function askFal(user, imageDataUrl) {
+  const out = await fal.run('openrouter/router/vision', {
+    model: env.scriptModel(),
+    system_prompt: SYSTEM,
+    prompt: user,
+    image_urls: imageDataUrl ? [imageDataUrl] : [],
+    temperature: 0.8,
+    max_tokens: 2500,
+  });
+  return out?.output;
 }
 
 export async function writeScript({ productName, description, offer, style, voiceGender, clipCount, imageDataUrl }) {
-  const key = env.openAiKey();
-  if (!key) return templateScript({ productName, description, offer, clipCount });
-
-  const speaker = voiceGender === 'FEMALE' ? 'a young Egyptian woman' : 'a young Egyptian man';
-  const system = 'You write short, high-converting video ad scripts for Egyptian e-commerce on TikTok, Reels and Facebook. You reply with JSON only.';
-  const user = [
-    `Product: ${productName}`,
-    description ? `Description from the seller: ${description}` : '',
-    offer ? `Offer / price to mention in the last scene: ${offer}` : '',
-    `Ad style: ${STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC}`,
-    `Write exactly ${clipCount} scenes. Each scene is one ${env.clipSeconds()}-second clip generated from the attached product photo.`,
-    'Scene 1 must be a scroll-stopping hook. The last scene must state the offer and tell viewers to order now.',
-    `The speaker is ${speaker}.`,
-    'For each scene return:',
-    '- "camera": shot type and movement, in English.',
-    '- "visual": what happens on screen, in English, max 60 words. The product must stay exactly as in the photo (same shape, colors, logo, packaging). No on-screen text.',
-    `- "voiceover": the spoken line in Egyptian Arabic colloquial dialect (عامية مصرية), max ${MAX_VOICE_WORDS} words, natural and persuasive, no exaggerated medical or guaranteed claims.`,
-    'Return JSON: {"hook": string, "cta": string, "scenes": [{"camera": string, "visual": string, "voiceover": string}]}',
-  ].filter(Boolean).join('\n');
-
-  const content = [{ type: 'text', text: user }];
-  if (imageDataUrl) content.push({ type: 'image_url', image_url: { url: imageDataUrl } });
-
+  const openAiKey = env.openAiKey();
+  if (!openAiKey && !env.falKey()) return templateScript({ productName, description, offer, clipCount });
+  const user = scriptRequest({ productName, description, offer, style, voiceGender, clipCount });
   try {
-    const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: env.openAiModel(),
-        response_format: { type: 'json_object' },
-        messages: [{ role: 'system', content: system }, { role: 'user', content }],
-      }),
-    });
-    if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-    const data = await res.json();
-    const parsed = normalize(JSON.parse(data.choices?.[0]?.message?.content || '{}'), clipCount);
+    const reply = openAiKey ? await askOpenAi(openAiKey, user, imageDataUrl) : await askFal(user, imageDataUrl);
+    const parsed = normalize(parseJsonObject(reply), clipCount);
     if (parsed) return parsed;
     throw new Error('script JSON missing scenes');
   } catch (err) {
@@ -122,15 +192,33 @@ export async function writeScript({ productName, description, offer, style, voic
   }
 }
 
-/** The prompt sent to the video model for one scene. */
-export function scenePrompt(scene, { style, voiceGender, aspectRatio }) {
-  const speaker = voiceGender === 'FEMALE' ? 'a young Egyptian woman' : 'a young Egyptian man';
+const SPEAKER = { FEMALE: 'a young Egyptian woman', MALE: 'a young Egyptian man' };
+
+/** The image-edit prompt that turns the product photo into a scene's first frame. */
+export function keyframePrompt(scene, { product, style, voiceGender, aspectRatio }) {
+  return [
+    'Create one photorealistic photo that looks like a real frame from a smartphone video, not an advert render.',
+    `Scene: ${scene.visual}`,
+    style !== 'SHOWCASE' ? `The person is ${SPEAKER[voiceGender] || SPEAKER.MALE}, with natural skin texture and real proportions.` : '',
+    'The product in the reference image must appear in the scene EXACTLY as it is: same shape, proportions, colors, materials, every part, logo and label text. Do not redesign, simplify, recolor or add anything to it.',
+    product?.details ? `Product look: ${product.details}` : '',
+    product?.usage ? `It is held and used like this: ${product.usage}` : '',
+    'Show it at real-world size, fully visible, in correct use.',
+    `${aspectRatio === '16:9' ? 'Horizontal 16:9' : 'Vertical 9:16'} frame, natural light, sharp focus on the product. No text, captions or watermarks.`,
+  ].filter(Boolean).join(' ');
+}
+
+/** The prompt sent to the video model for one scene (it starts from the first frame). */
+export function scenePrompt(scene, { style, voiceGender, aspectRatio, product }) {
   return [
     STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC,
     `Camera: ${scene.camera || 'medium shot'}.`,
-    scene.visual,
-    `${speaker} says in Egyptian Arabic dialect, clearly and naturally: "${scene.voiceover}"`,
-    'The product must look exactly like the reference image: same shape, colors, logo, label and packaging. Do not change, add or remove any part of the product.',
-    `Realistic, ${aspectRatio === '9:16' ? 'vertical 9:16 frame' : 'horizontal 16:9 frame'}. No on-screen text, captions, subtitles or watermarks.`,
-  ].join(' ');
+    scene.motion || scene.visual,
+    `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says in Egyptian Arabic dialect, clearly and naturally, with matching lip movement: "${scene.voiceover}"`,
+    'The product must look exactly like the reference image for the whole clip: same shape, colors, logo, label and packaging. It does not morph, bend, melt or change; do not add or remove any part of the product.',
+    product?.usage ? `It is used like this: ${product.usage}` : '',
+    `Photorealistic real footage, ${aspectRatio === '9:16' ? 'vertical 9:16 frame' : 'horizontal 16:9 frame'}. No on-screen text, captions, subtitles or watermarks.`,
+  ].filter(Boolean).join(' ');
 }
+
+export const NEGATIVE_PROMPT = NEGATIVE;
