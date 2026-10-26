@@ -42,6 +42,7 @@ npm run dev                 # http://localhost:3000
 2. في Variables ضيف `DATABASE_URL` (من خدمة Postgres) و `JWT_SECRET` و `FAL_KEY` و `OPENAI_API_KEY` و `VODAFONE_CASH_NUMBER`.
 3. `railway.json` فيه أمر التشغيل (`npm start`، اللي بيعمل `prisma migrate deploy` الأول) وفحص `/health`.
 4. حط إيميلك في `ADMIN_EMAILS` وسجّل بيه من صفحة «إنشاء حساب»، والحساب هيبقى أدمن لوحده. (أو `npm run admin:create`.)
+5. نسيت باسورد الأدمن؟ ضيف `ADMIN_RESET_PASSWORD` بالباسورد الجديد في Variables، واستنى الـ Deploy، وادخل بيه، وبعدين امسح المتغير.
 
 ## الإعدادات المهمة
 
