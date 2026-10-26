@@ -17,6 +17,11 @@ export class FalError extends Error {
   }
 }
 
+// Set when fal refuses work because the account has no credit; cleared by the
+// next accepted request. The admin overview shows it as a banner.
+let noBalanceSince = null;
+export const falBalanceOut = () => noBalanceSince;
+
 // Tests swap this for a fake.
 let fetchImpl = (...args) => fetch(...args);
 export function setFetch(fn) { fetchImpl = fn || ((...args) => fetch(...args)); }
@@ -45,8 +50,13 @@ async function call(method, url, body, timeoutMs = TIMEOUT_MS) {
   if (!res.ok) {
     const detail = data?.detail;
     const msg = typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map((d) => d.msg || JSON.stringify(d)).join('; ') : text.slice(0, 300);
+    if (res.status === 403 && /exhausted balance|user is locked/i.test(msg)) {
+      noBalanceSince = noBalanceSince || new Date();
+      throw new FalError(`رصيد fal.ai خلص: ${msg}`, 'NO_BALANCE', res.status);
+    }
     throw new FalError(`fal.ai رجّع خطأ ${res.status}: ${msg}`, 'HTTP_ERROR', res.status);
   }
+  if (method === 'POST') noBalanceSince = null;
   return data;
 }
 

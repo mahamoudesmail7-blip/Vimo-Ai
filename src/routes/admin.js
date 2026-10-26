@@ -5,6 +5,7 @@ import { AppError, asyncRoute } from '../errors.js';
 import { requireAuth, requireAdmin, publicUser } from '../auth.js';
 import { applyCredits } from '../services/credits.js';
 import { serialize } from '../services/videoJob.js';
+import { falBalanceOut } from '../services/fal.js';
 import { getBlob, sendBlob } from '../services/storage.js';
 import { serializeTopup } from './wallet.js';
 
@@ -28,7 +29,7 @@ router.get('/overview', asyncRoute(async (req, res) => {
   res.json({
     users, pendingTopups, revenueEgp: approved._sum.amount_egp || 0, videosToday, completed, failed, active,
     estCostPerVideoUsd: Math.round((seconds * env.costPerSecondUsd() + (env.keyframeModel() ? 0.15 * env.defaultClipCount() : 0) + 0.05) * 100) / 100,
-    falConfigured: !!env.falKey(), scriptAi: !!env.openAiKey(),
+    falConfigured: !!env.falKey(), scriptAi: !!(env.openAiKey() || env.falKey()), falBalanceOut: falBalanceOut(),
   });
 }));
 
