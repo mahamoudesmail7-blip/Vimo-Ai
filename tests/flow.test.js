@@ -32,7 +32,7 @@ async function fakeFetch(url, opts = {}) {
   if (rs) {
     const sub = fake.submitted.find((s) => s.id === rs[1]);
     if (!sub.body.video_urls && fake.failClips) return json(422, { detail: 'content policy' });
-    if (sub.body.image_urls) return json(200, { images: [{ url: `https://cdn.fake/${rs[1]}.jpg` }] });
+    if (sub.model.includes('nano-banana')) return json(200, { images: [{ url: `https://cdn.fake/${rs[1]}.jpg` }] });
     return json(200, { video: { url: `https://cdn.fake/${rs[1]}.mp4` } });
   }
   if (url.startsWith('https://cdn.fake/')) return new Response(Buffer.from('FAKE-MP4-BYTES-0123456789'), { status: 200 });
@@ -108,7 +108,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   assert.equal(r.status, 201);
   const ok = await settle(r.data.id);
   assert.equal(ok.status, 'COMPLETED', ok.error);
-  const frameSubs = fake.submitted.filter((s) => s.body.image_urls);
+  const frameSubs = fake.submitted.filter((s) => s.model.includes('nano-banana'));
   assert.equal(frameSubs.length, 3, 'a first frame per scene');
   assert.ok(frameSubs.every((s) => s.model === 'fal-ai/nano-banana-pro/edit' && s.body.image_urls[0].startsWith('data:image/png') && s.body.aspect_ratio === '9:16'));
   const clipSubs = fake.submitted.filter((s) => s.body.image_url);
@@ -198,4 +198,21 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   assert.equal(JSON.stringify(r.data).includes('mona'), false, 'no customer data in the public list');
   r = await anon('GET', `/api/showcase/${ok.id}/video`);
   assert.equal(r.status, 200);
+
+  // Ingredients mode (like Google Flow): each clip is made from the first frame + the product photo as references
+  process.env.VIMO_VIDEO_MODE = 'ingredients';
+  try {
+    await admin('POST', `/api/admin/users/${(await user('GET', '/api/auth/me')).data.user.id}/credits`, { delta: 1, note: 'test' });
+    const start = fake.submitted.length;
+    r = await user('POST', '/api/videos', { productName: 'جهاز', image: PNG });
+    assert.equal(r.status, 201);
+    const ing = await settle(r.data.id);
+    assert.equal(ing.status, 'COMPLETED', ing.error);
+    const refSubs = fake.submitted.slice(start).filter((x) => x.model === 'fal-ai/veo3.1/fast/reference-to-video');
+    assert.equal(refSubs.length, 3);
+    assert.ok(refSubs.every((x) => x.body.image_urls.length === 2 && x.body.image_urls[0].endsWith('.jpg') && x.body.image_urls[1].startsWith('data:image/png')));
+    assert.ok(refSubs.every((x) => x.body.prompt.includes('Scene: ')), 'the scene is described when there is no first frame to animate');
+  } finally {
+    delete process.env.VIMO_VIDEO_MODE;
+  }
 });

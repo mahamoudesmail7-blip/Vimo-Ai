@@ -208,11 +208,16 @@ export function keyframePrompt(scene, { product, style, voiceGender, aspectRatio
   ].filter(Boolean).join(' ');
 }
 
-/** The prompt sent to the video model for one scene (it starts from the first frame). */
-export function scenePrompt(scene, { style, voiceGender, aspectRatio, product }) {
+/**
+ * The prompt sent to the video model for one scene. It starts from the first
+ * frame, or with `withScene` (Ingredients mode) it builds the scene from the
+ * reference images, so the scene is described too.
+ */
+export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, withScene = false }) {
   return [
     STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC,
     `Camera: ${scene.camera || 'medium shot'}.`,
+    withScene ? `Scene: ${scene.visual}` : '',
     scene.motion || scene.visual,
     `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says in Egyptian Arabic dialect, fast and energetic like a fast-paced TikTok ad, clearly, with no long pauses and matching lip movement, finishing the line before the clip ends: "${scene.voiceover}"`,
     'The product must look exactly like the reference image for the whole clip: same shape, colors, logo, label and packaging. It does not morph, bend, melt or change; do not add or remove any part of the product.',
