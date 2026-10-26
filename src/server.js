@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env, publicConfig } from './config.js';
@@ -46,6 +47,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (env.adminEmails().length) {
     const { count } = await prisma.user.updateMany({ where: { email: { in: env.adminEmails() }, role: { not: 'ADMIN' } }, data: { role: 'ADMIN' } });
     if (count) console.log(`Promoted ${count} account(s) from ADMIN_EMAILS to admin.`);
+  }
+  // Forgotten owner password: set ADMIN_RESET_PASSWORD on the host, redeploy, log in, then remove it.
+  const resetPassword = String(process.env.ADMIN_RESET_PASSWORD || '');
+  if (resetPassword && env.adminEmails().length) {
+    if (resetPassword.length < 8) console.error('ADMIN_RESET_PASSWORD must be at least 8 characters; ignored.');
+    else {
+      const { count } = await prisma.user.updateMany({ where: { email: { in: env.adminEmails() } }, data: { password_hash: await bcrypt.hash(resetPassword, 10), status: 'ACTIVE' } });
+      console.log(`Reset the password of ${count} ADMIN_EMAILS account(s). Remove ADMIN_RESET_PASSWORD now.`);
+    }
   }
   createApp().listen(env.port(), () => console.log(`Vimo AI listening on http://localhost:${env.port()}`));
   startWorker();

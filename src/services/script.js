@@ -23,12 +23,14 @@ function trimWords(s, max) {
 }
 
 export function templateScript({ productName, description, offer, clipCount }) {
-  const name = productName.trim();
-  const benefit = trimWords(String(description || '').split(/[.\n،,]/)[0] || `${name} هيفرق معاك`, 10);
+  const clean = (t) => String(t || '').replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim();
+  const name = clean(productName);
+  const benefit = trimWords(clean(String(description || '').split(/[.\n،,]/)[0]) || `${name} هيفرق معاك`, 9);
+  const say = (t) => trimWords(t, MAX_VOICE_WORDS);
   const lines = [
-    { camera: 'close-up, handheld', visual: `A person holds the product up to the camera with a surprised, excited face.`, voiceover: `بجد مش مصدق إن ${name} بالشكل ده!` },
-    { camera: 'medium shot, slow push-in', visual: 'The person uses the product naturally and shows its details to the camera.', voiceover: `${benefit}، وده اللي خلاني أحبه.` },
-    { camera: 'close-up on product, then person smiling', visual: 'The person points at the product and smiles at the camera, inviting viewers to order.', voiceover: offer ? `${trimWords(offer, 8)}، اطلبه دلوقتي قبل ما يخلص!` : 'اطلبه دلوقتي والتوصيل لحد باب البيت!' },
+    { camera: 'close-up, handheld', visual: `A person holds the product up to the camera with a surprised, excited face.`, voiceover: say(`بجد مش مصدق إن ${name} بالشكل ده! أول ما جربته فهمت الناس بتتكلم عنه ليه.`) },
+    { camera: 'medium shot, slow push-in', visual: 'The person uses the product naturally and shows its details to the camera.', voiceover: say(`${benefit}، وكمان سهل في الاستخدام وشكله حلو، وده اللي خلاني أحبه.`) },
+    { camera: 'close-up on product, then person smiling', visual: 'The person points at the product and smiles at the camera, inviting viewers to order.', voiceover: offer ? say(`${trimWords(clean(offer), 6)} ، والتوصيل لحد باب البيت والدفع عند الاستلام، اطلبه دلوقتي قبل ما الكمية تخلص!`) : 'اطلبه دلوقتي والتوصيل لحد باب البيت والدفع عند الاستلام، الحق قبل ما الكمية تخلص!' },
   ];
   const scenes = clipCount === 1 ? [lines[0]] : clipCount === 2 ? [lines[0], lines[2]] : lines.slice(0, 2).concat(Array(Math.max(0, clipCount - 3)).fill(lines[1]), [lines[2]]);
   return { hook: scenes[0].voiceover, cta: scenes[scenes.length - 1].voiceover, scenes, source: 'TEMPLATE' };
