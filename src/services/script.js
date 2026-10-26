@@ -17,7 +17,7 @@ const STYLE_DIRECTION = {
 };
 
 const NEGATIVE = 'product changes shape, product morphing, melting, warped or extra parts, different colors, changed or misspelled logo, distorted hands, extra fingers, cartoon, 3D render, CGI, plastic skin, on-screen text, subtitles, captions, watermark';
-export const MAX_VOICE_WORDS = 20; // ~8 seconds of natural Egyptian speech
+export const MAX_VOICE_WORDS = 24; // ~8 seconds of fast, energetic Egyptian speech
 
 let fetchImpl = (...args) => fetch(...args);
 export function setFetch(fn) { fetchImpl = fn || ((...args) => fetch(...args)); }
@@ -123,7 +123,7 @@ function scriptRequest({ productName, description, offer, style, voiceGender, cl
     '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt).',
     '',
     'Rules for "voiceover" (the line the speaker says on camera):',
-    `- Egyptian colloquial, warm and natural, like a friend recommending it. ${Math.max(12, MAX_VOICE_WORDS - 6)} to ${MAX_VOICE_WORDS} words, so it fills ${env.clipSeconds()} seconds.`,
+    `- Egyptian colloquial, warm and natural, like a friend excitedly recommending it. Fast-paced TikTok energy: ${MAX_VOICE_WORDS - 6} to ${MAX_VOICE_WORDS} words, short punchy phrases, so it is said quickly and fills the full ${env.clipSeconds()} seconds with no dead air.`,
     '- Specific to THIS product (use what you saw in the photo), no generic filler, do not repeat the product name in every line.',
     '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
     '',
@@ -214,7 +214,7 @@ export function scenePrompt(scene, { style, voiceGender, aspectRatio, product })
     STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC,
     `Camera: ${scene.camera || 'medium shot'}.`,
     scene.motion || scene.visual,
-    `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says in Egyptian Arabic dialect, clearly and naturally, with matching lip movement: "${scene.voiceover}"`,
+    `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says in Egyptian Arabic dialect, fast and energetic like a fast-paced TikTok ad, clearly, with no long pauses and matching lip movement, finishing the line before the clip ends: "${scene.voiceover}"`,
     'The product must look exactly like the reference image for the whole clip: same shape, colors, logo, label and packaging. It does not morph, bend, melt or change; do not add or remove any part of the product.',
     product?.usage ? `It is used like this: ${product.usage}` : '',
     `Photorealistic real footage, ${aspectRatio === '9:16' ? 'vertical 9:16 frame' : 'horizontal 16:9 frame'}. No on-screen text, captions, subtitles or watermarks.`,

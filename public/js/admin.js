@@ -39,7 +39,8 @@ async function renderOverview(view) {
     <h1>نظرة عامة</h1>
     <p class="sub">حالة Vimo AI النهارده.</p>
     ${o.falConfigured ? '' : '<div class="banner">⚠️ <b>FAL_KEY</b> مش متظبط، فالعملاء مش هيقدروا يعملوا فيديوهات. ضيفه في متغيرات البيئة.</div>'}
-    ${o.scriptAi ? '' : '<div class="banner">ℹ️ <b>OPENAI_API_KEY</b> مش متظبط، فالسكريبت بيتكتب من قالب ثابت بدل الذكاء الاصطناعي.</div>'}
+    ${o.falBalanceOut ? `<div class="banner">⚠️ <b>رصيد fal.ai خلص</b> من ${fmtDate(o.falBalanceOut)}، والفيديوهات بتفشل وبترجع للعملاء. <a href="https://fal.ai/dashboard/billing" target="_blank">اشحن من هنا</a>.</div>` : ''}
+    ${o.scriptAi ? '' : '<div class="banner">ℹ️ السكريبت بيتكتب من قالب ثابت بدل الذكاء الاصطناعي.</div>'}
     <div class="stats">
       ${stat('طلبات شحن مستنية', `<a href="#topups">${fmt(o.pendingTopups)}</a>`)}
       ${stat('إيراد الشحن المؤكد', `${fmt(o.revenueEgp)} ج.م`)}

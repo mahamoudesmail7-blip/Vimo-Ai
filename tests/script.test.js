@@ -104,3 +104,19 @@ test('an edited script keeps the motion and product notes from the preview', () 
   assert.deepEqual(script.scenes.map((s) => s.motion), ['m1', 'm2', 'm3']);
   assert.equal(script.product.usage, 'u');
 });
+
+test('an empty fal balance is reported as NO_BALANCE, and cleared by the next accepted request', async () => {
+  process.env.FAL_KEY = 'k';
+  const { submit, falBalanceOut, FalError } = await import('../src/services/fal.js');
+  setFetch(async () => new Response(JSON.stringify({ detail: 'User is locked. Reason: Exhausted balance.' }), { status: 403 }));
+  try {
+    await assert.rejects(submit('m', {}), (e) => e instanceof FalError && e.code === 'NO_BALANCE');
+    assert.ok(falBalanceOut());
+    setFetch(async () => new Response(JSON.stringify({ request_id: 'r' }), { status: 200 }));
+    await submit('m', {});
+    assert.equal(falBalanceOut(), null);
+  } finally {
+    setFetch(null);
+    process.env.FAL_KEY = '';
+  }
+});

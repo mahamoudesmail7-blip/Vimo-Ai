@@ -19,6 +19,7 @@ import { writeScript, scenePrompt, keyframePrompt, userScript, MAX_VOICE_WORDS, 
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
 const MAX_CLIP_ATTEMPTS = 2;
+const SERVICE_PAUSED = 'الخدمة متوقفة مؤقتًا من عندنا، والرصيد رجعلك. جرب تاني كمان شوية.';
 const STYLES = ['UGC', 'CINEMATIC', 'SHOWCASE'];
 const RATIOS = ['9:16', '16:9'];
 
@@ -169,6 +170,8 @@ async function handleError(job, err) {
     return;
   }
   console.error(`[worker] job ${job.id} failed:`, err.message);
+  // The customer never sees provider billing details; the admin gets a banner.
+  if (err instanceof fal.FalError && err.code === 'NO_BALANCE') return fail(job, SERVICE_PAUSED);
   await fail(job, err instanceof fal.FalError || err instanceof AppError ? err.message : 'حصل خطأ أثناء إنشاء الفيديو.');
 }
 
