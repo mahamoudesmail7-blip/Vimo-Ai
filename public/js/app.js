@@ -116,7 +116,7 @@ async function renderCreate(view) {
     if (!f.image) { err.textContent = 'ارفع صورة المنتج الأول.'; return; }
     const btn = $('#preview');
     btn.disabled = true;
-    btn.textContent = 'بنكتب السكريبت…';
+    btn.textContent = 'بنفهم المنتج ونكتب السكريبت… (حوالي نص دقيقة)';
     try {
       f.script = await api('POST', '/api/videos/script-preview', inputs());
       renderScript();
@@ -135,7 +135,7 @@ async function renderCreate(view) {
     btn.disabled = true;
     btn.textContent = 'بنبدأ…';
     try {
-      await api('POST', '/api/videos', { ...inputs(), script: f.script ? { scenes: f.script.scenes } : undefined });
+      await api('POST', '/api/videos', { ...inputs(), script: f.script ? { product: f.script.product, scenes: f.script.scenes } : undefined });
       state.form = { image: null, script: null, style: f.style, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender };
       await refreshMe();
       toast('بدأنا نعمل الفيديو 🎬');

@@ -1,7 +1,8 @@
 // The video pipeline. createVideo() stores the photo, charges one credit and
 // returns at once; the worker tick then moves the job along:
 //
-//   QUEUED -> SCRIPTING -> GENERATING (N clips on fal, in parallel)
+//   QUEUED -> SCRIPTING -> GENERATING (per scene, in parallel: a realistic
+//          first frame with the exact product, then the clip from that frame)
 //          -> MERGING (fal joins the clips) -> STORING (copy to our storage)
 //          -> COMPLETED
 //
@@ -14,7 +15,7 @@ import { AppError } from '../errors.js';
 import { applyCredits, refundVideo } from './credits.js';
 import { parseDataUrl, putBuffer, getDataUrl, IMAGE_MIMES } from './storage.js';
 import * as fal from './fal.js';
-import { writeScript, scenePrompt, userScript, MAX_VOICE_WORDS } from './script.js';
+import { writeScript, scenePrompt, keyframePrompt, userScript, MAX_VOICE_WORDS, NEGATIVE_PROMPT } from './script.js';
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
 const MAX_CLIP_ATTEMPTS = 2;
@@ -197,28 +198,66 @@ async function startJob(job) {
       voiceGender: job.voice_gender, clipCount: job.clip_count, imageDataUrl,
     });
   }
-  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio };
-  const clips = script.scenes.map((scene, index) => ({ index, prompt: scenePrompt(scene, opts), status: 'PENDING', attempts: 0 }));
+  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product };
+  const withFrames = Boolean(env.keyframeModel());
+  const clips = script.scenes.map((scene, index) => ({
+    index,
+    prompt: scenePrompt(scene, opts),
+    ...(withFrames ? { frame: { prompt: keyframePrompt(scene, opts), status: 'PENDING', attempts: 0 } } : {}),
+    status: withFrames ? 'WAITING_FRAME' : 'PENDING',
+    attempts: 0,
+  }));
   job = await save(job, { script_json: JSON.stringify(script), clips_json: JSON.stringify(clips), status: 'GENERATING', progress: 10 });
   return pollClips(job, imageDataUrl);
 }
 
-async function submitClip(job, clip, imageDataUrl) {
-  const input = fal.clipInput(job.model || env.videoModel(), {
-    prompt: clip.prompt, imageUrl: imageDataUrl, aspectRatio: job.aspect_ratio, seconds: job.clip_seconds,
+async function submitClip(job, clip, imageUrl) {
+  const model = job.model || env.videoModel();
+  const input = fal.clipInput(model, {
+    prompt: clip.prompt, imageUrl, aspectRatio: job.aspect_ratio, seconds: job.clip_seconds, negativePrompt: NEGATIVE_PROMPT,
   });
-  const sub = await fal.submit(job.model || env.videoModel(), input);
+  const sub = await fal.submit(model, input);
   Object.assign(clip, sub, { status: 'SUBMITTED', attempts: clip.attempts + 1, error: null });
+}
+
+// The first frame of a scene. If the image model fails twice, the clip starts
+// from the plain product photo instead of failing the whole video.
+async function advanceFrame(job, clip, productImage) {
+  const frame = clip.frame;
+  if (frame.status === 'PENDING' || frame.status === 'RETRY') {
+    const sub = await fal.submit(env.keyframeModel(), fal.keyframeInput({ prompt: frame.prompt, imageUrl: await productImage(), aspectRatio: job.aspect_ratio }));
+    Object.assign(frame, sub, { status: 'SUBMITTED', attempts: frame.attempts + 1, error: null });
+    return;
+  }
+  if (await fal.status(frame.statusUrl) !== 'COMPLETED') return;
+  try {
+    const url = fal.imageUrlOf(await fal.result(frame.responseUrl));
+    if (!url) throw new fal.FalError('fal.ai خلّص من غير ما يرجّع صورة.', 'NO_IMAGE');
+    Object.assign(frame, { status: 'COMPLETED', url });
+    clip.status = 'PENDING';
+  } catch (err) {
+    if (!(err instanceof fal.FalError) || err.code === 'UNREACHABLE') throw err;
+    frame.error = err.message;
+    if (frame.attempts >= MAX_CLIP_ATTEMPTS) {
+      console.warn(`[worker] job ${job.id} scene ${clip.index + 1}: first frame failed, using the product photo:`, err.message);
+      frame.status = 'SKIPPED';
+      clip.status = 'PENDING';
+    } else frame.status = 'RETRY';
+  }
 }
 
 async function pollClips(job, imageDataUrl = null) {
   const clips = parse(job.clips_json) || [];
+  const productImage = async () => (imageDataUrl = imageDataUrl || await getDataUrl(job.image_key));
   try {
     for (const clip of clips) {
       if (clip.status === 'COMPLETED') continue;
+      if (clip.status === 'WAITING_FRAME') {
+        await advanceFrame(job, clip, productImage);
+        if (clip.status !== 'PENDING') continue;
+      }
       if (clip.status === 'PENDING' || clip.status === 'RETRY') {
-        imageDataUrl = imageDataUrl || await getDataUrl(job.image_key);
-        await submitClip(job, clip, imageDataUrl);
+        await submitClip(job, clip, clip.frame?.url || await productImage());
         continue;
       }
       const st = await fal.status(clip.statusUrl);
@@ -238,8 +277,9 @@ async function pollClips(job, imageDataUrl = null) {
       }
     }
   } finally {
-    // keep whatever was submitted/finished, even if a later clip threw
-    const done = clips.filter((c) => c.status === 'COMPLETED').length;
+    // keep whatever was submitted/finished, even if a later clip threw.
+    // Progress: a first frame counts as a quarter of its scene.
+    const done = clips.reduce((n, c) => n + (c.status === 'COMPLETED' ? 1 : c.frame && c.status !== 'WAITING_FRAME' ? 0.25 : 0), 0);
     await save(job, { clips_json: JSON.stringify(clips), progress: 10 + Math.round((70 * done) / Math.max(1, clips.length)) });
   }
 

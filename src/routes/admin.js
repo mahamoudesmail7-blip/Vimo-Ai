@@ -27,7 +27,7 @@ router.get('/overview', asyncRoute(async (req, res) => {
   const seconds = env.clipSeconds() * env.defaultClipCount();
   res.json({
     users, pendingTopups, revenueEgp: approved._sum.amount_egp || 0, videosToday, completed, failed, active,
-    estCostPerVideoUsd: Math.round(seconds * env.costPerSecondUsd() * 100) / 100,
+    estCostPerVideoUsd: Math.round((seconds * env.costPerSecondUsd() + (env.keyframeModel() ? 0.15 * env.defaultClipCount() : 0) + 0.05) * 100) / 100,
     falConfigured: !!env.falKey(), scriptAi: !!env.openAiKey(),
   });
 }));

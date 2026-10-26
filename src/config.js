@@ -20,9 +20,14 @@ export const env = {
   falKey: () => clean(process.env.FAL_KEY),
   openAiKey: () => clean(process.env.OPENAI_API_KEY),
   openAiModel: () => clean(process.env.OPENAI_MODEL) || 'gpt-4o-mini',
-  // fal model ids. Veo 3 Fast makes 8-second clips WITH sound and speech, which
-  // is how a 24s ad is 3 clips. The merge endpoint joins them into one mp4.
-  videoModel: () => clean(process.env.VIMO_VIDEO_MODEL) || 'fal-ai/veo3/fast/image-to-video',
+  // fal model ids. Each scene: an image-edit model puts the exact product into a
+  // realistic first frame, then Veo 3.1 Fast animates it into an 8-second clip
+  // WITH sound and speech (3 clips = a 24s ad). The merge endpoint joins them.
+  // VIMO_KEYFRAME_MODEL=off animates the raw product photo instead.
+  keyframeModel: () => { const v = clean(process.env.VIMO_KEYFRAME_MODEL); return v === 'off' ? '' : v || 'fal-ai/nano-banana-pro/edit'; },
+  videoModel: () => clean(process.env.VIMO_VIDEO_MODEL) || 'fal-ai/veo3.1/fast/image-to-video',
+  // The script writer: a vision LLM on fal (same FAL_KEY), unless OPENAI_API_KEY is set.
+  scriptModel: () => clean(process.env.VIMO_SCRIPT_MODEL) || 'anthropic/claude-sonnet-4.5',
   mergeModel: () => clean(process.env.VIMO_MERGE_MODEL) || 'fal-ai/ffmpeg-api/merge-videos',
   videoResolution: () => clean(process.env.VIMO_VIDEO_RESOLUTION) || '720p',
   clipSeconds: () => num(process.env.VIMO_CLIP_SECONDS, 8),
