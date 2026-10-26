@@ -201,7 +201,7 @@ async function startJob(job) {
       voiceGender: job.voice_gender, clipCount: job.clip_count, imageDataUrl,
     });
   }
-  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product };
+  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product, withScene: fal.isReferenceModel(job.model || env.videoModel()) };
   const withFrames = Boolean(env.keyframeModel());
   const clips = script.scenes.map((scene, index) => ({
     index,
@@ -214,10 +214,13 @@ async function startJob(job) {
   return pollClips(job, imageDataUrl);
 }
 
-async function submitClip(job, clip, imageUrl) {
+async function submitClip(job, clip, productImage) {
   const model = job.model || env.videoModel();
+  // Ingredients mode: the scene's first frame and the product photo are both references.
+  const referenceUrls = fal.isReferenceModel(model) ? [clip.frame?.url, await productImage()].filter(Boolean) : null;
   const input = fal.clipInput(model, {
-    prompt: clip.prompt, imageUrl, aspectRatio: job.aspect_ratio, seconds: job.clip_seconds, negativePrompt: NEGATIVE_PROMPT,
+    prompt: clip.prompt, imageUrl: clip.frame?.url || await productImage(), referenceUrls,
+    aspectRatio: job.aspect_ratio, seconds: job.clip_seconds, negativePrompt: NEGATIVE_PROMPT,
   });
   const sub = await fal.submit(model, input);
   Object.assign(clip, sub, { status: 'SUBMITTED', attempts: clip.attempts + 1, error: null });
@@ -260,7 +263,7 @@ async function pollClips(job, imageDataUrl = null) {
         if (clip.status !== 'PENDING') continue;
       }
       if (clip.status === 'PENDING' || clip.status === 'RETRY') {
-        await submitClip(job, clip, clip.frame?.url || await productImage());
+        await submitClip(job, clip, productImage);
         continue;
       }
       const st = await fal.status(clip.statusUrl);

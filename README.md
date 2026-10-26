@@ -53,6 +53,7 @@ npm run dev                 # http://localhost:3000
 - `FAL_KEY`: من غيره العملاء مش هيقدروا يعملوا فيديوهات، والأدمن بيشوف تنبيه.
 - `VIMO_PACKAGES`: الباقات والأسعار (JSON). الافتراضي زي EasyVideos: فيديو بـ 350، 3 بـ 800، 5 بـ 1200، 10 بـ 2000.
 - `VIMO_VIDEO_MODEL`: نموذج الفيديو على fal (الافتراضي `fal-ai/veo3.1/fast/image-to-video`). `fal-ai/veo3.1/image-to-video` جودة أعلى وأغلى.
+- `VIMO_VIDEO_MODE=ingredients`: زي «Ingredients» في Google Flow. بدل ما المشهد يتحرك من صورة البداية، Veo 3.1 Reference-to-Video بيعمله من صورة البداية وصورة المنتج كمراجع ثابتة. نفس السعر.
 - `VIMO_KEYFRAME_MODEL`: نموذج صورة البداية (الافتراضي `fal-ai/nano-banana-pro/edit`)، و`off` يلغيها.
 - `VIMO_SCRIPT_MODEL`: نموذج كتابة السكريبت على fal (الافتراضي `anthropic/claude-sonnet-4.5`).
 - `VIMO_CLIP_COUNT` و `VIMO_CLIP_SECONDS`: عدد المشاهد وطول كل واحد (3 × 8 = 24 ثانية).

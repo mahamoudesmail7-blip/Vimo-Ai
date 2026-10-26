@@ -25,7 +25,11 @@ export const env = {
   // WITH sound and speech (3 clips = a 24s ad). The merge endpoint joins them.
   // VIMO_KEYFRAME_MODEL=off animates the raw product photo instead.
   keyframeModel: () => { const v = clean(process.env.VIMO_KEYFRAME_MODEL); return v === 'off' ? '' : v || 'fal-ai/nano-banana-pro/edit'; },
-  videoModel: () => clean(process.env.VIMO_VIDEO_MODEL) || 'fal-ai/veo3.1/fast/image-to-video',
+  // VIMO_VIDEO_MODE=ingredients works like Google Flow's "Ingredients": the clip
+  // is made from reference images (the scene's first frame + the product photo)
+  // instead of being animated from one frame.
+  videoMode: () => (clean(process.env.VIMO_VIDEO_MODE).toLowerCase() === 'ingredients' ? 'ingredients' : 'frame'),
+  videoModel: () => clean(process.env.VIMO_VIDEO_MODEL) || (env.videoMode() === 'ingredients' ? 'fal-ai/veo3.1/fast/reference-to-video' : 'fal-ai/veo3.1/fast/image-to-video'),
   // The script writer: a vision LLM on fal (same FAL_KEY), unless OPENAI_API_KEY is set.
   scriptModel: () => clean(process.env.VIMO_SCRIPT_MODEL) || 'anthropic/claude-sonnet-4.5',
   mergeModel: () => clean(process.env.VIMO_MERGE_MODEL) || 'fal-ai/ffmpeg-api/merge-videos',

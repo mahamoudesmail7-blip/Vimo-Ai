@@ -122,7 +122,19 @@ export function keyframeInput({ prompt, imageUrl, aspectRatio }) {
  * Kling-style models take a bare number of seconds. Anything else gets the
  * common fields only.
  */
-export function clipInput(modelId, { prompt, imageUrl, aspectRatio, seconds, negativePrompt }) {
+export const isReferenceModel = (modelId) => /reference-to-video/i.test(modelId);
+
+export function clipInput(modelId, { prompt, imageUrl, referenceUrls, aspectRatio, seconds, negativePrompt }) {
+  if (isReferenceModel(modelId)) {
+    return {
+      prompt,
+      image_urls: referenceUrls?.length ? referenceUrls : [imageUrl],
+      aspect_ratio: aspectRatio,
+      duration: `${seconds}s`,
+      generate_audio: true,
+      resolution: env.videoResolution(),
+    };
+  }
   if (/veo/i.test(modelId)) {
     return {
       prompt,
