@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vimo AI — حوّل صورة منتجك لفيديو إعلاني</title>
+<meta name="description" content="ارفع صورة منتجك واحصل على فيديو إعلاني 24 ثانية بصوت مصري في دقايق. من غير تصوير ولا مونتاج." />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="/" id="brand"></a>
+    <nav>
+      <a class="btn small hide-sm" href="#how">إزاي بيشتغل</a>
+      <a class="btn small hide-sm" href="#pricing">الأسعار</a>
+      <a class="btn small" href="/auth">دخول</a>
+      <a class="btn small primary" href="/auth?mode=signup">ابدأ الآن</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <h1>حوّل صورة منتجك لـ <span class="hl">فيديو إعلاني</span> بيبيع</h1>
+      <p>ارفع صورة المنتج واكتب كلمتين عنه، وVimo AI يطلعلك فيديو <span id="secs">24</span> ثانية بصوت وكلام مصري، جاهز لتيك توك وريلز وفيسبوك. من غير تصوير ولا مونتاج.</p>
+      <div class="cta">
+        <a class="btn primary" href="/auth?mode=signup">اعمل أول فيديو</a>
+        <a class="btn" href="#pricing">شوف الأسعار</a>
+      </div>
+      <div class="pills">
+        <span class="pill">صوت بالعامية المصرية</span>
+        <span class="pill">المنتج زي ما هو بالظبط</span>
+        <span class="pill">طولي 9:16 أو عرضي 16:9</span>
+        <span class="pill">جاهز في دقايق</span>
+      </div>
+    </div>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>إزاي بيشتغل؟</h2>
+      <p class="lead">تلات خطوات وبس، والباقي علينا.</p>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><h3>ارفع صورة المنتج</h3><p>صورة واضحة للمنتج، ومعاها وصف قصير والعرض أو السعر لو حابب.</p></div>
+        <div class="step"><div class="n">2</div><h3>الذكاء الاصطناعي يشتغل</h3><p>بنكتب سكريبت بيبيع بالمصري، ونصوّر 3 مشاهد بالمنتج نفسه، ونجمعهم في فيديو واحد.</p></div>
+        <div class="step"><div class="n">3</div><h3>حمّل الفيديو</h3><p>فيديو جاهز للنشر على السوشيال ميديا، تحمّله وتطلّعه إعلان على طول.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="showcase" class="hidden">
+    <div class="wrap">
+      <h2>شوف شغلنا</h2>
+      <p class="lead">فيديوهات حقيقية اتعملت على Vimo AI، من صورة لفيديو في دقايق.</p>
+      <div class="videos" id="gallery"></div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <div class="wrap">
+      <h2>سعر لا يُصدّق</h2>
+      <p class="lead">فيديو UGC واحد بشخص حقيقي بيكلفك من 3,000 لـ 15,000 جنيه، غير الانتظار والتعديلات. هنا بتدفع على قد ما بتستخدم.</p>
+      <div class="plans" id="plans"></div>
+      <p class="compare">الدفع بـ <b>فودافون كاش</b>، والرصيد بيتضاف لحسابك بعد تأكيد التحويل.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>أسئلة بتتسأل كتير</h2>
+      <div class="faq">
+        <details><summary>المنتج هيطلع زي الحقيقي؟</summary><p>كل مشهد بيتعمل من صورة منتجك نفسها، وبنطلب من الذكاء الاصطناعي يحافظ على الشكل والألوان واللوجو. كل ما الصورة أوضح، النتيجة أحسن.</p></details>
+        <details><summary>الفيديو بيتكلم مصري؟</summary><p>أيوه، السكريبت بالعامية المصرية والصوت جوه الفيديو نفسه، وتقدر تختار صوت راجل أو ست.</p></details>
+        <details><summary>لو الفيديو فشل؟</summary><p>لو حصل أي مشكلة في التوليد، الفيديو بيرجع لرصيدك تلقائي.</p></details>
+        <details><summary>بدفع إزاي؟</summary><p>اختار الباقة، حوّل المبلغ فودافون كاش، واكتب الرقم اللي حوّلت منه. أول ما نأكد التحويل الرصيد بيتضاف.</p></details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Vimo AI © <span id="year"></span> — جميع الحقوق محفوظة</span>
+    <span id="support"></span>
+  </div>
+</footer>
+
+<script type="module">
+  import { api, esc, fmt, LOGO } from '/js/common.js';
+  document.getElementById('brand').innerHTML = LOGO;
+  document.getElementById('year').textContent = new Date().getFullYear();
+  api('GET', '/api/showcase').then(({ videos }) => {
+    if (!videos.length) return;
+    document.getElementById('gallery').innerHTML = videos.map((v) => `
+      <div class="vcard"><div class="media ${v.aspectRatio === '16:9' ? 'wide' : ''}"><video src="${v.videoUrl}" poster="${v.imageUrl}" controls playsinline preload="none"></video></div>
+      <div class="body"><div class="title">${esc(v.productName)}</div></div></div>`).join('');
+    document.getElementById('showcase').classList.remove('hidden');
+  }).catch(() => {});
+  const cfg = await api('GET', '/api/config').catch(() => null);
+  if (cfg) {
+    document.getElementById('secs').textContent = cfg.videoSeconds;
+    const base = cfg.packages[0]?.perVideoEgp || 0;
+    document.getElementById('plans').innerHTML = cfg.packages.map((p, i) => `
+      <div class="plan ${i === 1 ? 'featured' : ''}">
+        ${p.label && i > 0 ? `<span class="tag">${esc(p.label)}</span>` : ''}
+        <div class="muted">${p.videos === 1 ? 'فيديو واحد' : `${fmt(p.videos)} فيديوهات`}</div>
+        <div class="price">${fmt(p.priceEgp)} <small>ج.م</small></div>
+        <div class="per">${fmt(p.perVideoEgp)} ج.م لكل فيديو</div>
+        ${base > p.perVideoEgp ? `<div class="save">وفّر ${fmt(base - p.perVideoEgp)} ج.م في كل فيديو</div>` : `<div class="per">${esc(p.note || '')}</div>`}
+        <ul><li>فيديو ${fmt(cfg.videoSeconds)} ثانية</li><li>صوت بالعامية المصرية</li><li>جودة عالية لكل المنصات</li></ul>
+        <a class="btn ${i === 1 ? 'primary' : ''}" href="/auth?mode=signup">جربها</a>
+      </div>`).join('');
+    if (cfg.supportWhatsapp) document.getElementById('support').innerHTML = `واتساب الدعم: <a href="https://wa.me/${esc(cfg.supportWhatsapp.replace(/\D/g, ''))}">${esc(cfg.supportWhatsapp)}</a>`;
+  }
+</script>
+</body>
+</html>

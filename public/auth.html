@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>تسجيل الدخول — Vimo AI</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <a class="brand" href="/" id="brand"></a>
+    <div class="tabs">
+      <button data-mode="login" class="active">تسجيل الدخول</button>
+      <button data-mode="signup">إنشاء حساب</button>
+    </div>
+    <form id="form" novalidate>
+      <div class="field signup-only hidden"><label for="name">الاسم</label><input id="name" type="text" autocomplete="name" /></div>
+      <div class="field"><label for="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" dir="ltr" /></div>
+      <div class="field signup-only hidden"><label for="phone">رقم الموبايل (اختياري)</label><input id="phone" type="tel" dir="ltr" placeholder="01xxxxxxxxx" /></div>
+      <div class="field"><label for="password">كلمة المرور</label><input id="password" type="password" autocomplete="current-password" dir="ltr" /></div>
+      <div class="err" id="err"></div>
+      <button class="btn primary" style="width:100%" id="submit">دخول</button>
+    </form>
+    <p class="center muted" id="switch" style="margin:16px 0 0"></p>
+  </div>
+</div>
+<script type="module">
+  import { api, $, $$, LOGO } from '/js/common.js';
+  $('#brand').innerHTML = LOGO;
+  let mode = new URLSearchParams(location.search).get('mode') === 'signup' ? 'signup' : 'login';
+
+  function render() {
+    $$('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+    $$('.signup-only').forEach((el) => el.classList.toggle('hidden', mode !== 'signup'));
+    $('#submit').textContent = mode === 'signup' ? 'إنشاء حساب' : 'دخول';
+    $('#password').autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+    $('#switch').innerHTML = mode === 'signup'
+      ? 'عندك حساب؟ <a href="#" data-go="login">سجّل دخول</a>'
+      : 'ليس لديك حساب؟ <a href="#" data-go="signup">إنشاء حساب</a>';
+    $('#err').textContent = '';
+  }
+  $$('.tabs button').forEach((b) => { b.onclick = () => { mode = b.dataset.mode; render(); }; });
+  $('#switch').onclick = (e) => { const go = e.target.dataset.go; if (go) { e.preventDefault(); mode = go; render(); } };
+
+  $('#form').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('#submit');
+    btn.disabled = true;
+    $('#err').textContent = '';
+    try {
+      const body = { email: $('#email').value, password: $('#password').value };
+      if (mode === 'signup') Object.assign(body, { name: $('#name').value, phone: $('#phone').value });
+      const { user } = await api('POST', `/api/auth/${mode}`, body);
+      location.href = user.role === 'ADMIN' ? '/admin' : '/app';
+    } catch (err) {
+      $('#err').textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  // already signed in -> straight to the dashboard
+  api('GET', '/api/auth/me').then(({ user }) => { location.href = user.role === 'ADMIN' ? '/admin' : '/app'; }).catch(() => {});
+  render();
+</script>
+</body>
+</html>
