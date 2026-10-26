@@ -50,3 +50,12 @@ test('an edited script keeps the customer lines and rejects bad ones', () => {
   assert.match(userScript({ scenes: [{ voiceover: 'x' }, { voiceover: '' }, { voiceover: 'y' }] }, 3).error, /المشهد 2/);
   assert.match(userScript({ scenes: [{ voiceover: 'كلمة '.repeat(40) }, { voiceover: 'y' }, { voiceover: 'z' }] }, 3).error, /طويل/);
 });
+
+test('template lines are long enough for an 8s clip and drop emoji', () => {
+  const s = templateScript({ productName: 'جهاز مضاد للاختناق', description: '🌬️ جهاز استنشاق محمول', offer: '1199', clipCount: 3 });
+  for (const scene of s.scenes) {
+    const words = scene.voiceover.split(/\s+/).length;
+    assert.ok(words >= 12 && words <= 20, `${words} words: ${scene.voiceover}`);
+    assert.doesNotMatch(scene.voiceover, /\p{Extended_Pictographic}/u);
+  }
+});
