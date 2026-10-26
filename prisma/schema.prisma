@@ -1,0 +1,135 @@
+// Vimo AI — database schema.
+//
+// Money model (same as EasyVideos): the user buys a PACKAGE of videos, pays by
+// Vodafone Cash, an admin approves the top-up request, and the user's
+// `credits` (= videos left) go up. Every change to credits is written to the
+// CreditTransaction ledger in the same DB transaction, so the balance can
+// always be explained. A failed video refunds its credit automatically.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// role: USER | ADMIN. status: ACTIVE | DISABLED.
+model User {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  name          String
+  phone         String?
+  password_hash String
+  role          String   @default("USER")
+  status        String   @default("ACTIVE")
+  credits       Int      @default(0)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  videos       VideoJob[]
+  topups       TopupRequest[]         @relation("TopupOwner")
+  reviewed     TopupRequest[]         @relation("TopupReviewer")
+  transactions CreditTransaction[]
+
+  @@map("users")
+}
+
+// reason: TOPUP | VIDEO | REFUND | ADMIN_ADJUST | SIGNUP_BONUS
+model CreditTransaction {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  delta      Int
+  balance    Int // balance AFTER this row
+  reason     String
+  ref        String? // "topup:12" | "video:34"
+  note       String?
+  created_at DateTime @default(now())
+
+  @@index([user_id, created_at])
+  @@map("credit_transactions")
+}
+
+// status: PENDING | APPROVED | REJECTED
+model TopupRequest {
+  id            Int       @id @default(autoincrement())
+  user_id       Int
+  user          User      @relation("TopupOwner", fields: [user_id], references: [id], onDelete: Cascade)
+  package_key   String
+  videos        Int
+  amount_egp    Int
+  sender_phone  String
+  reference     String? // Vodafone Cash transaction id the user typed
+  receipt_key   String? // optional screenshot, in blobs
+  status        String    @default("PENDING")
+  admin_note    String?
+  reviewed_by   Int?
+  reviewer      User?     @relation("TopupReviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
+  reviewed_at   DateTime?
+  created_at    DateTime  @default(now())
+
+  @@index([status, created_at])
+  @@index([user_id])
+  @@map("topup_requests")
+}
+
+// One ad video. The worker tick moves it through the states, so a video
+// keeps rendering with the browser closed and resumes after a restart.
+// status: QUEUED | SCRIPTING | GENERATING | MERGING | STORING | COMPLETED | FAILED
+model VideoJob {
+  id      Int    @id @default(autoincrement())
+  uuid    String @unique @default(uuid())
+  user_id Int
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  product_name String
+  description  String?
+  offer        String? // price / discount line the CTA says
+  voice_gender String  @default("MALE") // MALE | FEMALE
+  style        String  @default("UGC") // UGC | CINEMATIC | SHOWCASE
+  aspect_ratio String  @default("9:16") // 9:16 | 16:9
+  clip_count   Int     @default(3)
+  clip_seconds Int     @default(8)
+
+  image_key  String
+  image_mime String @default("image/jpeg")
+
+  script_json String? // { hook, cta, scenes:[{camera, visual, voiceover}], source }
+  clips_json  String? // [{ index, prompt, requestId, statusUrl, responseUrl, status, attempts, videoUrl, error }]
+  merge_json  String? // { requestId, statusUrl, responseUrl, status, videoUrl }
+  model       String?
+  status      String  @default("QUEUED")
+  progress    Int     @default(0)
+  error       String?
+  charged     Boolean @default(false)
+  refunded    Boolean @default(false)
+
+  provider_video_url String? // fal CDN url (temporary)
+  video_key          String? // our durable copy
+  video_bytes        Int?
+
+  started_at   DateTime?
+  finished_at  DateTime?
+  heartbeat_at DateTime?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  @@index([user_id, created_at])
+  @@index([status])
+  @@map("video_jobs")
+}
+
+// Durable bytes for the default `db` storage driver (product photos,
+// receipts, finished videos). With STORAGE_DRIVER=s3 nothing lands here.
+model Blob {
+  id         Int      @id @default(autoincrement())
+  key        String   @unique
+  data       Bytes
+  mime       String
+  bytes      Int
+  created_at DateTime @default(now())
+
+  @@map("blobs")
+}

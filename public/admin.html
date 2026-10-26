@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vimo AI — لوحة الأدمن</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="mobile-bar">
+  <a class="brand logo-slot" href="/admin"></a>
+  <button class="btn small" id="menuBtn">القائمة</button>
+</div>
+<div class="shell">
+  <aside class="side" id="side">
+    <a class="brand logo-slot" href="/admin"></a>
+    <a class="nav" href="#overview" data-tab="overview">📊 نظرة عامة</a>
+    <a class="nav" href="#topups" data-tab="topups">💳 طلبات الشحن <span class="badge warn hidden" id="pendingBadge"></span></a>
+    <a class="nav" href="#users" data-tab="users">👥 العملاء</a>
+    <a class="nav" href="#videos" data-tab="videos">🎬 كل الفيديوهات</a>
+    <a class="nav" href="/app">↩︎ لوحة العميل</a>
+    <div class="credits-box">
+      <div class="muted" style="font-size:13px" id="who"></div>
+      <a href="#" id="logout" class="muted" style="font-size:13px">تسجيل خروج</a>
+    </div>
+  </aside>
+  <main class="main" id="view"></main>
+</div>
+<script type="module" src="/js/admin.js"></script>
+</body>
+</html>

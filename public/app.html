@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vimo AI — لوحة التحكم</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="mobile-bar">
+  <a class="brand logo-slot" href="/app"></a>
+  <button class="btn small" id="menuBtn">القائمة</button>
+</div>
+<div class="shell">
+  <aside class="side" id="side">
+    <a class="brand logo-slot" href="/app"></a>
+    <a class="nav" href="#create" data-tab="create">🎬 فيديو جديد</a>
+    <a class="nav" href="#videos" data-tab="videos">🗂️ فيديوهاتي</a>
+    <a class="nav" href="#wallet" data-tab="wallet">💳 الرصيد والشحن</a>
+    <a class="nav hidden" href="/admin" id="adminLink">🛡️ لوحة الأدمن</a>
+    <div class="credits-box">
+      <div class="muted">رصيدك</div>
+      <div class="num"><span id="credits">0</span> <small class="muted" style="font-size:14px">فيديو</small></div>
+      <a class="btn small primary" href="#wallet" style="width:100%;margin-top:8px">اشحن رصيد</a>
+      <div class="muted" style="font-size:13px;margin-top:10px" id="who"></div>
+      <a href="#" id="logout" class="muted" style="font-size:13px">تسجيل خروج</a>
+    </div>
+  </aside>
+  <main class="main" id="view"></main>
+</div>
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
