@@ -8,9 +8,12 @@ import { serialize } from '../services/videoJob.js';
 import { falBalanceOut } from '../services/fal.js';
 import { getBlob, sendBlob } from '../services/storage.js';
 import { serializeTopup } from './wallet.js';
+import enginesRoutes from './engines.js';
+import { loadSettings, planVideo } from '../engine/index.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
+router.use('/engines', enginesRoutes);
 
 const idOf = (v) => { const n = Number(v); if (!Number.isInteger(n) || n <= 0) throw new AppError('رقم غير صالح.'); return n; };
 
@@ -25,10 +28,10 @@ router.get('/overview', asyncRoute(async (req, res) => {
     prisma.videoJob.count({ where: { status: 'FAILED' } }),
     prisma.videoJob.count({ where: { status: { notIn: ['COMPLETED', 'FAILED'] } } }),
   ]);
-  const seconds = env.clipSeconds() * env.defaultClipCount();
+  const { plan } = planVideo({ style: 'AUTO', settings: await loadSettings() });
   res.json({
     users, pendingTopups, revenueEgp: approved._sum.amount_egp || 0, videosToday, completed, failed, active,
-    estCostPerVideoUsd: Math.round((seconds * env.costPerSecondUsd() + (env.keyframeModel() ? 0.15 * env.defaultClipCount() : 0) + 0.05) * 100) / 100,
+    estCostPerVideoUsd: plan ? Math.round(plan.estimate.totalUsd * 100) / 100 : null, engineReady: Boolean(plan),
     falConfigured: !!env.falKey(), scriptAi: !!(env.openAiKey() || env.falKey()), falBalanceOut: falBalanceOut(),
   });
 }));

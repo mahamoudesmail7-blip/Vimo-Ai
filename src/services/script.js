@@ -11,6 +11,7 @@ import { env } from '../config.js';
 import * as fal from './fal.js';
 
 const STYLE_DIRECTION = {
+  AUTO: 'High-converting Egyptian social ad: a real Egyptian person using the product in a real home, mixed with sharp close-ups of the product details, natural light, filmed on a smartphone.',
   UGC: 'Authentic user-generated-content look: filmed on a smartphone, handheld, natural home lighting, a real Egyptian person talking to the camera like a TikTok review.',
   CINEMATIC: 'Premium cinematic product commercial: smooth slow camera moves, soft natural light, shallow depth of field, an elegant real Egyptian home or street setting.',
   SHOWCASE: 'Clean product showcase: the product on a tidy real surface, close-up details, slow push-in shots, bright even lighting, a person only as hands or in the background.',
@@ -18,6 +19,9 @@ const STYLE_DIRECTION = {
 
 const NEGATIVE = 'product changes shape, product morphing, melting, warped or extra parts, different colors, changed or misspelled logo, distorted hands, extra fingers, cartoon, 3D render, CGI, plastic skin, on-screen text, subtitles, captions, watermark';
 export const MAX_VOICE_WORDS = 24; // ~8 seconds of fast, energetic Egyptian speech
+/** How many spoken words fit a scene: ~3 words/s fast, ~2.4 normal. */
+export const wordsFor = (seconds, pace = 'fast') => Math.max(8, Math.round(seconds * (pace === 'normal' ? 2.4 : 3)));
+const limitsOf = (clipCount, sceneSeconds, pace) => Array.from({ length: clipCount }, (_, i) => wordsFor(sceneSeconds?.[i] || env.clipSeconds(), pace));
 
 let fetchImpl = (...args) => fetch(...args);
 export function setFetch(fn) { fetchImpl = fn || ((...args) => fetch(...args)); }
@@ -27,7 +31,7 @@ function trimWords(s, max) {
   return words.length <= max ? words.join(' ') : words.slice(0, max).join(' ');
 }
 
-export function templateScript({ productName, description, offer, clipCount }) {
+export function templateScript({ productName, description, offer, clipCount, sceneSeconds, pace }) {
   const clean = (t) => String(t || '').replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim();
   const name = clean(productName);
   const benefit = trimWords(clean(String(description || '').split(/[.\n،,]/)[0]) || `${name} هيفرق معاك`, 9);
@@ -38,17 +42,19 @@ export function templateScript({ productName, description, offer, clipCount }) {
     { camera: 'close-up on product, then person smiling', visual: 'Close-up: the person holds the product toward the camera and smiles, warm natural light.', motion: 'The person nods and smiles while talking to the camera; the product stays still in frame.', voiceover: offer ? say(`${trimWords(clean(offer), 6)} ، والتوصيل لحد باب البيت والدفع عند الاستلام، اطلبه دلوقتي قبل ما الكمية تخلص!`) : 'اطلبه دلوقتي والتوصيل لحد باب البيت والدفع عند الاستلام، الحق قبل ما الكمية تخلص!' },
   ];
   const scenes = clipCount === 1 ? [lines[0]] : clipCount === 2 ? [lines[0], lines[2]] : lines.slice(0, 2).concat(Array(Math.max(0, clipCount - 3)).fill(lines[1]), [lines[2]]);
-  return { hook: scenes[0].voiceover, cta: scenes[scenes.length - 1].voiceover, scenes, source: 'TEMPLATE' };
+  const limits = limitsOf(clipCount, sceneSeconds, pace);
+  const fitted = scenes.map((sc, i) => ({ ...sc, voiceover: trimWords(sc.voiceover, limits[i]) }));
+  return { hook: fitted[0].voiceover, cta: fitted[fitted.length - 1].voiceover, scenes: fitted, source: 'TEMPLATE' };
 }
 
-function normalize(data, clipCount) {
+function normalize(data, clipCount, limits) {
   const scenes = Array.isArray(data?.scenes) ? data.scenes : [];
   if (scenes.length < clipCount) return null;
-  const out = scenes.slice(0, clipCount).map((s) => ({
+  const out = scenes.slice(0, clipCount).map((s, i) => ({
     camera: String(s.camera || '').slice(0, 160),
     visual: String(s.visual || '').slice(0, 900),
     motion: String(s.motion || '').slice(0, 500),
-    voiceover: trimWords(s.voiceover, MAX_VOICE_WORDS),
+    voiceover: trimWords(s.voiceover, limits[i]),
   }));
   if (out.some((s) => !s.visual || !s.voiceover)) return null;
   return {
@@ -78,14 +84,15 @@ const GENERIC_VISUAL = [
  * were sent back.
  * Returns { script } or { error } (Arabic, shown to the customer).
  */
-export function userScript(input, clipCount) {
+export function userScript(input, clipCount, { sceneSeconds, pace } = {}) {
+  const limits = limitsOf(clipCount, sceneSeconds, pace);
   const scenes = Array.isArray(input?.scenes) ? input.scenes : [];
   if (scenes.length !== clipCount) return { error: `السكريبت لازم يكون ${clipCount} مشاهد.` };
   const out = [];
   for (const [i, s] of scenes.entries()) {
     const voiceover = String(s?.voiceover || '').trim().replace(/\s+/g, ' ');
     if (!voiceover) return { error: `اكتب كلام المشهد ${i + 1}.` };
-    if (voiceover.split(' ').length > MAX_VOICE_WORDS + 5) return { error: `كلام المشهد ${i + 1} طويل على ${env.clipSeconds()} ثواني، خليه أقصر.` };
+    if (voiceover.split(' ').length > limits[i] + 5) return { error: `كلام المشهد ${i + 1} طويل على ${sceneSeconds?.[i] || env.clipSeconds()} ثواني، خليه أقصر.` };
     const last = i === scenes.length - 1 && i > 0;
     out.push({
       camera: String(s?.camera || '').slice(0, 160) || 'medium shot',
@@ -103,27 +110,32 @@ const SYSTEM = [
   'You reply with one JSON object only, no markdown.',
 ].join(' ');
 
-function scriptRequest({ productName, description, offer, style, voiceGender, clipCount }) {
+function scriptRequest({ productName, description, offer, style, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech' }) {
+  const limits = limitsOf(clipCount, sceneSeconds, pace);
+  const secs = Array.from({ length: clipCount }, (_, i) => sceneSeconds?.[i] || env.clipSeconds());
+  const voiceover = mode === 'voiceover';
   const speaker = voiceGender === 'FEMALE' ? 'a young Egyptian woman (around 25-35)' : 'a young Egyptian man (around 25-35)';
   return [
     `Product name: ${productName}`,
     description ? `Seller's description: ${description}` : '',
     offer ? `Offer / price (must be said in the last scene): ${offer}` : '',
     `Ad style: ${STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC}`,
-    `Speaker: ${speaker}.`,
+    voiceover ? `Voice: ${speaker} reads the lines as a voiceover over the footage; nobody talks on camera, people only react naturally.` : `Speaker: ${speaker}.`,
     '',
     'STEP 1. Study the attached product photo closely before writing anything:',
     '- what the product really is and what problem it solves;',
     '- exactly how it is physically held and used (which hand, which part touches the body or the object, its size compared to a hand);',
     '- its exact look: shape, proportions, colors, materials, every visible part, logo and label text.',
     '',
-    `STEP 2. Write a ${clipCount}-scene ad. Each scene is ONE ${env.clipSeconds()}-second clip.`,
+    `STEP 2. Write a ${clipCount}-scene ad. Each scene is ONE clip; the scene lengths in seconds are: ${secs.join(', ')}.`,
     '- Scene 1 is the hook: in the first 2 seconds hit a real pain, fear or desire of the buyer, or say something surprising. It must make an Egyptian stop scrolling.',
     '- Middle scene(s): show the product being used correctly and give ONE concrete benefit with a feeling or a quick proof (a before/after moment, a reaction).',
     '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt).',
     '',
-    'Rules for "voiceover" (the line the speaker says on camera):',
-    `- Egyptian colloquial, warm and natural, like a friend excitedly recommending it. Fast-paced TikTok energy: ${MAX_VOICE_WORDS - 6} to ${MAX_VOICE_WORDS} words, short punchy phrases, so it is said quickly and fills the full ${env.clipSeconds()} seconds with no dead air.`,
+    voiceover ? 'Rules for "voiceover" (the narration for that scene):' : 'Rules for "voiceover" (the line the speaker says on camera):',
+    pace === 'normal'
+      ? `- Egyptian colloquial, warm and natural, like a friend recommending it, at a calm clear pace. Word count per scene: ${limits.map((l, i) => `scene ${i + 1}: ${l - 5}-${l}`).join(', ')}.`
+      : `- Egyptian colloquial, warm and natural, like a friend excitedly recommending it. Fast-paced TikTok energy, short punchy phrases, said quickly with no dead air. Word count per scene: ${limits.map((l, i) => `scene ${i + 1}: ${l - 6}-${l}`).join(', ')}.`,
     '- Specific to THIS product (use what you saw in the photo), no generic filler, do not repeat the product name in every line.',
     '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
     '',
@@ -177,18 +189,19 @@ async function askFal(user, imageDataUrl) {
   return out?.output;
 }
 
-export async function writeScript({ productName, description, offer, style, voiceGender, clipCount, imageDataUrl }) {
+export async function writeScript({ productName, description, offer, style, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode }) {
   const openAiKey = env.openAiKey();
-  if (!openAiKey && !env.falKey()) return templateScript({ productName, description, offer, clipCount });
-  const user = scriptRequest({ productName, description, offer, style, voiceGender, clipCount });
+  const limits = limitsOf(clipCount, sceneSeconds, pace);
+  if (!openAiKey && !env.falKey()) return templateScript({ productName, description, offer, clipCount, sceneSeconds, pace });
+  const user = scriptRequest({ productName, description, offer, style, voiceGender, clipCount, sceneSeconds, pace, mode });
   try {
     const reply = openAiKey ? await askOpenAi(openAiKey, user, imageDataUrl) : await askFal(user, imageDataUrl);
-    const parsed = normalize(parseJsonObject(reply), clipCount);
+    const parsed = normalize(parseJsonObject(reply), clipCount, limits);
     if (parsed) return parsed;
     throw new Error('script JSON missing scenes');
   } catch (err) {
     console.warn('[script] AI script failed, using template:', err.message);
-    return templateScript({ productName, description, offer, clipCount });
+    return templateScript({ productName, description, offer, clipCount, sceneSeconds, pace });
   }
 }
 
@@ -213,13 +226,19 @@ export function keyframePrompt(scene, { product, style, voiceGender, aspectRatio
  * frame, or with `withScene` (Ingredients mode) it builds the scene from the
  * reference images, so the scene is described too.
  */
-export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, withScene = false }) {
+export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, withScene = false, mode = 'speech', music = 'none', pace = 'fast' }) {
+  const speech = pace === 'normal'
+    ? 'in Egyptian Arabic dialect, warm and clear at a natural pace, with matching lip movement, finishing the line before the clip ends'
+    : 'in Egyptian Arabic dialect, fast and energetic like a fast-paced TikTok ad, clearly, with no long pauses and matching lip movement, finishing the line before the clip ends';
   return [
     STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC,
     `Camera: ${scene.camera || 'medium shot'}.`,
     withScene ? `Scene: ${scene.visual}` : '',
     scene.motion || scene.visual,
-    `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says in Egyptian Arabic dialect, fast and energetic like a fast-paced TikTok ad, clearly, with no long pauses and matching lip movement, finishing the line before the clip ends: "${scene.voiceover}"`,
+    mode === 'voiceover'
+      ? 'Nobody speaks in this clip: no dialogue and no lip movement; people only react naturally. Silent footage.'
+      : `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says ${speech}: "${scene.voiceover}"`,
+    mode === 'speech' ? (music === 'light' ? 'Light upbeat background music, quiet under the voice.' : 'No background music, only the voice and natural room sound.') : '',
     'The product must look exactly like the reference image for the whole clip: same shape, colors, logo, label and packaging. It does not morph, bend, melt or change; do not add or remove any part of the product.',
     product?.usage ? `It is used like this: ${product.usage}` : '',
     `Photorealistic real footage, ${aspectRatio === '9:16' ? 'vertical 9:16 frame' : 'horizontal 16:9 frame'}. No on-screen text, captions, subtitles or watermarks.`,

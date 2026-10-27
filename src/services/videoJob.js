@@ -1,41 +1,54 @@
-// The video pipeline. createVideo() stores the photo, charges one credit and
-// returns at once; the worker tick then moves the job along:
+// The video pipeline. createVideo() plans the video (engine/planner.js),
+// checks the spending limits and the provider balance, stores the photos,
+// charges one credit and returns at once; the worker tick then moves the job:
 //
 //   QUEUED -> SCRIPTING -> GENERATING (per scene, in parallel: a realistic
-//          first frame with the exact product, then the clip from that frame)
-//          -> MERGING (fal joins the clips) -> STORING (copy to our storage)
-//          -> COMPLETED
+//          first frame with the exact product, then the clip from that frame;
+//          plus the voiceover in voiceover mode)
+//          -> MERGING (join the clips) -> MIXING (voiceover mode: lay the
+//          voice over the video) -> STORING (copy to our storage) -> COMPLETED
 //
-// Each tick does one short step per job and saves, so nothing waits on a
-// minutes-long HTTP call and a restart picks up where it left off. Any
-// failure ends in FAILED with the credit refunded.
+// The plan (provider, models, scene lengths) is fixed at order time. Each tick
+// does one short step per job and saves, so nothing waits on a minutes-long
+// HTTP call and a restart picks up where it left off. Any failure ends in
+// FAILED with the credit refunded.
 import { prisma } from '../db.js';
 import { env } from '../config.js';
 import { AppError } from '../errors.js';
 import { applyCredits, refundVideo } from './credits.js';
 import { parseDataUrl, putBuffer, getDataUrl, IMAGE_MIMES } from './storage.js';
-import * as fal from './fal.js';
-import { writeScript, scenePrompt, keyframePrompt, userScript, MAX_VOICE_WORDS, NEGATIVE_PROMPT } from './script.js';
+import { writeScript, scenePrompt, keyframePrompt, userScript, wordsFor, NEGATIVE_PROMPT } from './script.js';
+import { planVideo, checkBudget, loadSettings, submitStep, pollStep } from '../engine/index.js';
+import { modelByEndpoint } from '../engine/catalog.js';
+import { recordEvent } from '../engine/budget.js';
+import { EngineError, isTransient } from '../engine/errors.js';
+import { toBuffer } from '../engine/media.js';
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
 const MAX_CLIP_ATTEMPTS = 2;
+const MAX_IMAGES = 4;
 const SERVICE_PAUSED = 'الخدمة متوقفة مؤقتًا من عندنا، والرصيد رجعلك. جرب تاني كمان شوية.';
-const STYLES = ['UGC', 'CINEMATIC', 'SHOWCASE'];
+const UNAVAILABLE = 'إنشاء الفيديو مش متاح دلوقتي. جرب تاني كمان شوية أو كلم الدعم.';
+const STYLES = ['AUTO', 'UGC', 'SHOWCASE', 'CINEMATIC'];
 const RATIOS = ['9:16', '16:9'];
 
 const running = new Set();
 
 function readInputs(body) {
-  const productName = String(body.productName || '').trim();
-  if (productName.length < 2) throw new AppError('اكتب اسم المنتج.');
+  const description = String(body.description || '').trim().slice(0, 1500) || null;
+  // The product name is optional now: the first words of the description stand in.
+  let productName = String(body.productName || '').trim();
+  if (!productName && description) productName = description.split(/[.\n،,!؟?]/)[0].split(/\s+/).slice(0, 5).join(' ');
+  if (productName.length < 2) throw new AppError('اكتب وصف قصير للمنتج.');
   if (productName.length > 120) throw new AppError('اسم المنتج طويل جدًا.');
   return {
     productName,
-    description: String(body.description || '').trim().slice(0, 1500) || null,
+    description,
     offer: String(body.offer || '').trim().slice(0, 200) || null,
-    style: STYLES.includes(body.style) ? body.style : 'UGC',
+    style: STYLES.includes(body.style) ? body.style : 'AUTO',
     aspectRatio: RATIOS.includes(body.aspectRatio) ? body.aspectRatio : '9:16',
     voiceGender: body.voiceGender === 'FEMALE' ? 'FEMALE' : 'MALE',
+    options: { music: body.music === 'light' ? 'light' : 'none', pace: body.pace === 'normal' ? 'normal' : 'fast' },
   };
 }
 
@@ -46,58 +59,122 @@ function readImage(dataUrl) {
   return { mime, buffer, dataUrl };
 }
 
+/** `images: [dataUrl, ...]` (the first is the main photo), or the older single `image`. */
+function readImages(body) {
+  const list = Array.isArray(body.images) && body.images.length ? body.images : body.image ? [body.image] : [];
+  if (!list.length) throw new AppError('ارفع صورة المنتج.');
+  if (list.length > MAX_IMAGES) throw new AppError(`أقصى عدد ${MAX_IMAGES} صور.`);
+  return list.map(readImage);
+}
+
+// The customer sees one generic message; the admin sees the reason on the AI Engines page.
+async function planOrRefuse(inputs) {
+  const settings = await loadSettings();
+  const { plan, error } = planVideo({ style: inputs.style, pace: inputs.options.pace, settings });
+  if (!plan) {
+    await recordEvent({ provider: 'engine', kind: 'REFUSED', message: error });
+    throw new AppError(UNAVAILABLE, 503, 'VIDEO_NOT_CONFIGURED');
+  }
+  return { plan, settings };
+}
+
+/** What the customer sees before ordering: the credit price and whether it can run now. */
+export async function quote() {
+  const settings = await loadSettings();
+  const { plan } = planVideo({ style: 'AUTO', settings });
+  return { credits: 1, seconds: plan?.seconds || env.clipSeconds() * env.defaultClipCount(), available: Boolean(plan) };
+}
+
 /** Write the script for the customer to read and edit before paying a credit. */
 export async function previewScript(body) {
   const inputs = readInputs(body);
-  const image = readImage(body.image);
-  const script = await writeScript({ ...inputs, clipCount: env.defaultClipCount(), imageDataUrl: image.dataUrl });
-  return { ...script, maxWords: MAX_VOICE_WORDS, clipSeconds: env.clipSeconds() };
+  const [image] = readImages(body);
+  const settings = await loadSettings();
+  const { plan } = planVideo({ style: inputs.style, pace: inputs.options.pace, settings });
+  const sceneSeconds = plan?.sceneSeconds || Array(env.defaultClipCount()).fill(env.clipSeconds());
+  const script = await writeScript({ ...inputs, clipCount: sceneSeconds.length, sceneSeconds, pace: inputs.options.pace, mode: plan?.mode, imageDataUrl: image.dataUrl });
+  return { ...script, maxWords: wordsFor(Math.max(...sceneSeconds), inputs.options.pace), sceneSeconds, clipSeconds: sceneSeconds[0] };
 }
 
-async function insertJob(userId, inputs, { imageKey, imageMime, script = null }) {
+async function insertJob(userId, inputs, { imageKey, imageMime, extraImageKeys = [], script = null, plan, settings, clientRef = null }) {
   const job = await prisma.$transaction(async (tx) => {
+    // One order at a time passes the budget check, so two clicks can't both spend the last dollars.
+    await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(7710301)');
+    const budget = await checkBudget(plan, settings);
+    if (!budget.ok) {
+      await recordEvent({ provider: budget.provider || 'engine', kind: 'REFUSED', usd: plan.estimate.totalUsd, message: budget.reason });
+      throw new AppError(UNAVAILABLE, 503, 'ENGINE_BUDGET');
+    }
     const created = await tx.videoJob.create({
       data: {
         user_id: userId, product_name: inputs.productName, description: inputs.description, offer: inputs.offer,
         style: inputs.style, aspect_ratio: inputs.aspectRatio, voice_gender: inputs.voiceGender,
-        clip_count: env.defaultClipCount(), clip_seconds: env.clipSeconds(),
-        image_key: imageKey, image_mime: imageMime, model: env.videoModel(), charged: true,
+        clip_count: plan.sceneSeconds.length, clip_seconds: plan.sceneSeconds[0],
+        image_key: imageKey, image_mime: imageMime, extra_image_keys: extraImageKeys.length ? JSON.stringify(extraImageKeys) : null,
+        model: plan.models.video, provider: plan.provider, plan_json: JSON.stringify(plan), options_json: JSON.stringify(inputs.options),
+        cost_estimate_usd: plan.estimate.totalUsd, client_ref: clientRef, charged: true,
         script_json: script ? JSON.stringify(script) : null,
       },
     });
     await applyCredits(tx, userId, -1, 'VIDEO', { ref: `video:${created.id}` });
     return created;
-  });
+  }, { timeout: 20000 });
   kick();
   return serialize(job);
 }
 
+function readClientRef(v) {
+  const ref = String(v || '').trim();
+  return /^[A-Za-z0-9_-]{8,64}$/.test(ref) ? ref : null;
+}
+
 export async function createVideo(userId, body) {
-  if (!env.falKey()) throw new AppError('توليد الفيديو مش متاح دلوقتي. كلم الدعم.', 503, 'VIDEO_NOT_CONFIGURED');
+  // The same click sent twice (double tap, retry after a timeout) returns the first order.
+  const ref = readClientRef(body.clientRef);
+  const clientRef = ref ? `u${userId}:${ref}` : null;
+  if (clientRef) {
+    const existing = await prisma.videoJob.findUnique({ where: { client_ref: clientRef } });
+    if (existing) return serialize(existing);
+  }
   const inputs = readInputs(body);
+  const { plan, settings } = await planOrRefuse(inputs);
   let script = null;
   if (body.script) {
-    const checked = userScript(body.script, env.defaultClipCount());
+    const checked = userScript(body.script, plan.sceneSeconds.length, { sceneSeconds: plan.sceneSeconds, pace: inputs.options.pace });
     if (checked.error) throw new AppError(checked.error);
     script = checked.script;
   }
-  const image = readImage(body.image);
-  const stored = await putBuffer(image.buffer, image.mime, 'products');
-  return insertJob(userId, inputs, { imageKey: stored.key, imageMime: image.mime, script });
+  const images = readImages(body);
+  const stored = [];
+  for (const img of images) stored.push(await putBuffer(img.buffer, img.mime, 'products'));
+  try {
+    return await insertJob(userId, inputs, { imageKey: stored[0].key, imageMime: images[0].mime, extraImageKeys: stored.slice(1).map((s) => s.key), script, plan, settings, clientRef });
+  } catch (err) {
+    if (err?.code === 'P2002' && clientRef) {
+      const existing = await prisma.videoJob.findUnique({ where: { client_ref: clientRef } });
+      if (existing) return serialize(existing);
+    }
+    throw err;
+  }
 }
 
-/** Same photo and inputs, a new render. `sameScript` keeps the spoken lines. */
+/** Same photos and inputs, a new render. `sameScript` keeps the spoken lines. */
 export async function remakeVideo(userId, sourceId, { sameScript = true } = {}) {
-  if (!env.falKey()) throw new AppError('توليد الفيديو مش متاح دلوقتي. كلم الدعم.', 503, 'VIDEO_NOT_CONFIGURED');
   const src = await prisma.videoJob.findUnique({ where: { id: sourceId } });
   if (!src || src.user_id !== userId) throw new AppError('الفيديو مش موجود.', 404, 'NOT_FOUND');
-  const inputs = { productName: src.product_name, description: src.description, offer: src.offer, style: src.style, aspectRatio: src.aspect_ratio, voiceGender: src.voice_gender };
+  const options = parse(src.options_json) || { music: 'none', pace: 'fast' };
+  const inputs = { productName: src.product_name, description: src.description, offer: src.offer, style: src.style, aspectRatio: src.aspect_ratio, voiceGender: src.voice_gender, options };
+  const { plan, settings } = await planOrRefuse(inputs);
   const script = sameScript ? parse(src.script_json) : null;
-  return insertJob(userId, inputs, { imageKey: src.image_key, imageMime: src.image_mime, script: script?.scenes?.length === env.defaultClipCount() ? script : null });
+  return insertJob(userId, inputs, {
+    imageKey: src.image_key, imageMime: src.image_mime, extraImageKeys: parse(src.extra_image_keys) || [], plan, settings,
+    script: script?.scenes?.length === plan.sceneSeconds.length ? script : null,
+  });
 }
 
 export function serialize(job, { admin = false } = {}) {
   const script = parse(job.script_json);
+  const plan = parse(job.plan_json);
   return {
     id: job.id,
     uuid: job.uuid,
@@ -107,7 +184,7 @@ export function serialize(job, { admin = false } = {}) {
     style: job.style,
     aspectRatio: job.aspect_ratio,
     voiceGender: job.voice_gender,
-    seconds: job.clip_count * job.clip_seconds,
+    seconds: plan?.seconds || job.clip_count * job.clip_seconds,
     status: job.status,
     progress: job.progress,
     error: job.error,
@@ -118,11 +195,26 @@ export function serialize(job, { admin = false } = {}) {
     showcase: job.showcase,
     createdAt: job.created_at,
     finishedAt: job.finished_at,
-    ...(admin ? { userId: job.user_id, model: job.model, clips: parse(job.clips_json), merge: parse(job.merge_json) } : {}),
+    ...(admin ? {
+      userId: job.user_id, model: job.model, provider: job.provider, plan, costEstimateUsd: job.cost_estimate_usd, costActualUsd: job.cost_actual_usd,
+      clips: parse(job.clips_json), merge: parse(job.merge_json), audio: parse(job.audio_json),
+    } : {}),
   };
 }
 
 function parse(s) { try { return s ? JSON.parse(s) : null; } catch { return null; } }
+
+/** Jobs created before the engine stored a bare fal endpoint; give them the plan they ran with. */
+function planOf(job) {
+  const plan = parse(job.plan_json);
+  if (plan) return plan;
+  const video = modelByEndpoint(job.model || env.videoModel())?.id || 'fal:veo31-fast';
+  return {
+    tier: 'standard', mode: 'speech', provider: 'fal', pace: 'fast', sceneSeconds: Array(job.clip_count).fill(job.clip_seconds), seconds: job.clip_count * job.clip_seconds,
+    models: { video, image: env.keyframeModel() ? 'fal:nano-banana-pro' : null, tts: null, merge: job.clip_count > 1 ? 'fal:merge-videos' : null, mux: null },
+    estimate: { totalUsd: 0, byProvider: {}, lines: [] },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Worker
@@ -161,18 +253,18 @@ async function fail(job, message) {
   await refundVideo(job);
 }
 
-// Network blips and fal 5xx/429 are retried on the next tick; anything else
-// (bad input, missing key) ends the job.
+// Network blips and provider 5xx/429 are retried on the next tick; anything
+// else (bad input, missing key, no balance) ends the job.
 async function handleError(job, err) {
-  const transient = err instanceof fal.FalError && (err.code === 'UNREACHABLE' || err.httpStatus === 429 || (err.httpStatus || 0) >= 500);
-  if (transient) {
+  if (isTransient(err)) {
     console.warn(`[worker] job ${job.id}: transient error, retrying next tick:`, err.message);
     return;
   }
   console.error(`[worker] job ${job.id} failed:`, err.message);
+  await recordEvent({ jobId: job.id, provider: err.provider || job.provider || 'engine', model: job.model, kind: 'ERROR', message: err.message });
   // The customer never sees provider billing details; the admin gets a banner.
-  if (err instanceof fal.FalError && err.code === 'NO_BALANCE') return fail(job, SERVICE_PAUSED);
-  await fail(job, err instanceof fal.FalError || err instanceof AppError ? err.message : 'حصل خطأ أثناء إنشاء الفيديو.');
+  if (err instanceof EngineError && err.code === 'NO_BALANCE') return fail(job, SERVICE_PAUSED);
+  await fail(job, err instanceof EngineError || err instanceof AppError ? err.message : 'حصل خطأ أثناء إنشاء الفيديو.');
 }
 
 async function advance(job) {
@@ -184,138 +276,196 @@ async function advance(job) {
     case 'SCRIPTING': return startJob(job);
     case 'GENERATING': return pollClips(job);
     case 'MERGING': return pollMerge(job);
+    case 'MIXING': return pollMix(job);
     case 'STORING': return storeVideo(job);
     default: return undefined;
   }
 }
 
+async function productImages(job) {
+  const keys = [job.image_key, ...(parse(job.extra_image_keys) || [])];
+  const urls = [];
+  for (const k of keys) { const u = await getDataUrl(k); if (u) urls.push(u); }
+  return urls;
+}
+
 async function startJob(job) {
   job = await save(job, { status: 'SCRIPTING', progress: 5, started_at: job.started_at || new Date() });
-  const imageDataUrl = await getDataUrl(job.image_key);
-  if (!imageDataUrl) return fail(job, 'صورة المنتج مش موجودة.');
+  const images = await productImages(job);
+  if (!images.length) return fail(job, 'صورة المنتج مش موجودة.');
+  const plan = planOf(job);
+  const options = parse(job.options_json) || { music: 'none', pace: 'fast' };
 
   let script = parse(job.script_json);
   if (!script) {
     script = await writeScript({
       productName: job.product_name, description: job.description, offer: job.offer, style: job.style,
-      voiceGender: job.voice_gender, clipCount: job.clip_count, imageDataUrl,
+      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, mode: plan.mode, imageDataUrl: images[0],
     });
+    const scriptLine = plan.estimate.lines.find((l) => l.step === 'script');
+    if (script.source === 'AI' && scriptLine) {
+      await recordEvent({ jobId: job.id, provider: scriptLine.provider, model: scriptLine.model, kind: 'CHARGE', usd: scriptLine.usd });
+      await prisma.videoJob.update({ where: { id: job.id }, data: { cost_actual_usd: { increment: scriptLine.usd } } });
+    }
   }
-  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product, withScene: fal.isReferenceModel(job.model || env.videoModel()) };
-  const withFrames = Boolean(env.keyframeModel());
+  const videoModel = plan.models.video;
+  const withScene = /ref/.test(videoModel);
+  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product, withScene, mode: plan.mode, music: options.music, pace: options.pace };
+  const withFrames = Boolean(plan.models.image);
   const clips = script.scenes.map((scene, index) => ({
+    key: `clip${index}`,
     index,
+    seconds: plan.sceneSeconds[index] || plan.sceneSeconds[0],
     prompt: scenePrompt(scene, opts),
-    ...(withFrames ? { frame: { prompt: keyframePrompt(scene, opts), status: 'PENDING', attempts: 0 } } : {}),
+    ...(withFrames ? { frame: { key: `frame${index}`, prompt: keyframePrompt(scene, opts), status: 'PENDING', attempts: 0 } } : {}),
     status: withFrames ? 'WAITING_FRAME' : 'PENDING',
     attempts: 0,
   }));
-  job = await save(job, { script_json: JSON.stringify(script), clips_json: JSON.stringify(clips), status: 'GENERATING', progress: 10 });
-  return pollClips(job, imageDataUrl);
+  const audio = plan.mode === 'voiceover'
+    ? { tts: { key: 'tts', text: script.scenes.map((s) => s.voiceover).join(' ... '), status: 'PENDING', attempts: 0 } }
+    : null;
+  job = await save(job, { script_json: JSON.stringify(script), clips_json: JSON.stringify(clips), audio_json: audio ? JSON.stringify(audio) : null, status: 'GENERATING', progress: 10 });
+  return pollClips(job, images);
 }
 
-async function submitClip(job, clip, productImage) {
-  const model = job.model || env.videoModel();
-  // Ingredients mode: the scene's first frame and the product photo are both references.
-  const referenceUrls = fal.isReferenceModel(model) ? [clip.frame?.url, await productImage()].filter(Boolean) : null;
-  const input = fal.clipInput(model, {
-    prompt: clip.prompt, imageUrl: clip.frame?.url || await productImage(), referenceUrls,
-    aspectRatio: job.aspect_ratio, seconds: job.clip_seconds, negativePrompt: NEGATIVE_PROMPT,
-  });
-  const sub = await fal.submit(model, input);
-  Object.assign(clip, sub, { status: 'SUBMITTED', attempts: clip.attempts + 1, error: null });
+// Steps saved before the engine existed were all on fal and kept `videoUrl`.
+function legacyStep(step, modelId) {
+  if (step && !step.model && step.statusUrl) Object.assign(step, { provider: 'fal', model: modelId, url: step.url || step.videoUrl, usd: 0, charged: true });
+  return step;
+}
+
+// Poll one submitted step. A provider-reported failure is retried once (the
+// provider does not bill a failed request); then the step has FAILED.
+async function settle(job, step, label) {
+  try {
+    return await pollStep(job, step);
+  } catch (err) {
+    if (!(err instanceof EngineError) || isTransient(err)) throw err;
+    step.error = err.message;
+    await recordEvent({ jobId: job.id, provider: step.provider, model: step.model, kind: 'ERROR', message: `${label}: ${err.message}` });
+    if (step.attempts >= MAX_CLIP_ATTEMPTS) { step.status = 'FAILED'; return 'FAILED'; }
+    step.status = 'RETRY';
+    return 'RETRY';
+  }
+}
+
+async function submitClip(job, plan, clip, images) {
+  const refs = [clip.frame?.url, ...images].filter(Boolean);
+  await submitStep(job, clip, plan.models.video, 'video', {
+    prompt: clip.prompt, imageUrl: clip.frame?.url || images[0], referenceUrls: refs,
+    aspectRatio: job.aspect_ratio, seconds: clip.seconds, negativePrompt: NEGATIVE_PROMPT, audio: plan.mode === 'speech',
+  }, { seconds: clip.seconds, audio: plan.mode === 'speech' });
 }
 
 // The first frame of a scene. If the image model fails twice, the clip starts
 // from the plain product photo instead of failing the whole video.
-async function advanceFrame(job, clip, productImage) {
+async function advanceFrame(job, plan, clip, images) {
   const frame = clip.frame;
   if (frame.status === 'PENDING' || frame.status === 'RETRY') {
-    const sub = await fal.submit(env.keyframeModel(), fal.keyframeInput({ prompt: frame.prompt, imageUrl: await productImage(), aspectRatio: job.aspect_ratio }));
-    Object.assign(frame, sub, { status: 'SUBMITTED', attempts: frame.attempts + 1, error: null });
+    await submitStep(job, frame, plan.models.image, 'image', { prompt: frame.prompt, imageUrls: images, aspectRatio: job.aspect_ratio });
     return;
   }
-  if (await fal.status(frame.statusUrl) !== 'COMPLETED') return;
-  try {
-    const url = fal.imageUrlOf(await fal.result(frame.responseUrl));
-    if (!url) throw new fal.FalError('fal.ai خلّص من غير ما يرجّع صورة.', 'NO_IMAGE');
-    Object.assign(frame, { status: 'COMPLETED', url });
+  const st = await settle(job, frame, `أول فريم للمشهد ${clip.index + 1}`);
+  if (st === 'COMPLETED') clip.status = 'PENDING';
+  if (st === 'FAILED') {
+    console.warn(`[worker] job ${job.id} scene ${clip.index + 1}: first frame failed, using the product photo:`, frame.error);
+    frame.status = 'SKIPPED';
     clip.status = 'PENDING';
-  } catch (err) {
-    if (!(err instanceof fal.FalError) || err.code === 'UNREACHABLE') throw err;
-    frame.error = err.message;
-    if (frame.attempts >= MAX_CLIP_ATTEMPTS) {
-      console.warn(`[worker] job ${job.id} scene ${clip.index + 1}: first frame failed, using the product photo:`, err.message);
-      frame.status = 'SKIPPED';
-      clip.status = 'PENDING';
-    } else frame.status = 'RETRY';
   }
 }
 
-async function pollClips(job, imageDataUrl = null) {
+async function pollClips(job, images = null) {
+  const plan = planOf(job);
   const clips = parse(job.clips_json) || [];
-  const productImage = async () => (imageDataUrl = imageDataUrl || await getDataUrl(job.image_key));
+  const audio = parse(job.audio_json);
+  const loadImages = async () => (images = images || await productImages(job));
+  let failed = null;
   try {
     for (const clip of clips) {
+      legacyStep(clip, plan.models.video);
+      legacyStep(clip.frame, plan.models.image);
       if (clip.status === 'COMPLETED') continue;
       if (clip.status === 'WAITING_FRAME') {
-        await advanceFrame(job, clip, productImage);
+        await advanceFrame(job, plan, clip, await loadImages());
         if (clip.status !== 'PENDING') continue;
       }
       if (clip.status === 'PENDING' || clip.status === 'RETRY') {
-        await submitClip(job, clip, productImage);
+        await submitClip(job, plan, clip, await loadImages());
         continue;
       }
-      const st = await fal.status(clip.statusUrl);
-      if (st !== 'COMPLETED') continue;
-      try {
-        const url = fal.videoUrlOf(await fal.result(clip.responseUrl));
-        if (!url) throw new fal.FalError('fal.ai خلّص من غير ما يرجّع فيديو.', 'NO_VIDEO');
-        Object.assign(clip, { status: 'COMPLETED', videoUrl: url });
-      } catch (err) {
-        if (!(err instanceof fal.FalError) || err.code === 'UNREACHABLE') throw err;
-        clip.error = err.message;
-        if (clip.attempts >= MAX_CLIP_ATTEMPTS) {
-          await save(job, { clips_json: JSON.stringify(clips) });
-          return fail(job, `فشل إنشاء المشهد ${clip.index + 1}: ${err.message}`);
-        }
-        clip.status = 'RETRY';
-      }
+      const st = await settle(job, clip, `المشهد ${clip.index + 1}`);
+      if (st === 'FAILED') { failed = `فشل إنشاء المشهد ${clip.index + 1}: ${clip.error}`; break; }
+    }
+    const tts = audio?.tts;
+    if (!failed && tts && tts.status !== 'COMPLETED') {
+      if (tts.status === 'PENDING' || tts.status === 'RETRY') {
+        await submitStep(job, tts, plan.models.tts, 'tts', { text: tts.text, voiceGender: job.voice_gender }, { chars: tts.text.length });
+      } else if (await settle(job, tts, 'التعليق الصوتي') === 'FAILED') failed = `فشل التعليق الصوتي: ${tts.error}`;
     }
   } finally {
-    // keep whatever was submitted/finished, even if a later clip threw.
+    // keep whatever was submitted/finished, even if a later step threw.
     // Progress: a first frame counts as a quarter of its scene.
     const done = clips.reduce((n, c) => n + (c.status === 'COMPLETED' ? 1 : c.frame && c.status !== 'WAITING_FRAME' ? 0.25 : 0), 0);
-    await save(job, { clips_json: JSON.stringify(clips), progress: 10 + Math.round((70 * done) / Math.max(1, clips.length)) });
+    job = await save(job, { clips_json: JSON.stringify(clips), ...(audio ? { audio_json: JSON.stringify(audio) } : {}), progress: 10 + Math.round((70 * done) / Math.max(1, clips.length)) });
   }
+  if (failed) return fail(job, failed);
 
   if (!clips.length || !clips.every((c) => c.status === 'COMPLETED')) return undefined;
-  if (clips.length === 1) return save(job, { status: 'STORING', progress: 90, provider_video_url: clips[0].videoUrl });
+  if (audio?.tts && audio.tts.status !== 'COMPLETED') return undefined;
+  if (clips.length === 1) return afterMerge(job, plan, clips[0].url);
 
-  const merge = await fal.submit(env.mergeModel(), { video_urls: clips.map((c) => c.videoUrl) });
-  return save(job, { status: 'MERGING', progress: 82, merge_json: JSON.stringify({ ...merge, status: 'SUBMITTED', attempts: 1 }) });
+  const merge = { key: 'merge' };
+  await submitStep(job, merge, plan.models.merge, 'merge', { videoUrls: clips.map((c) => c.url) }, { seconds: plan.seconds });
+  return save(job, { status: 'MERGING', progress: 82, merge_json: JSON.stringify(merge) });
 }
 
 async function pollMerge(job) {
-  const merge = parse(job.merge_json);
-  if (!merge?.statusUrl) return fail(job, 'بيانات دمج المقاطع ناقصة.');
-  const st = await fal.status(merge.statusUrl);
-  if (st !== 'COMPLETED') return undefined;
-  try {
-    const url = fal.videoUrlOf(await fal.result(merge.responseUrl));
-    if (!url) throw new fal.FalError('الدمج خلص من غير فيديو.', 'NO_VIDEO');
-    return save(job, { status: 'STORING', progress: 90, provider_video_url: url, merge_json: JSON.stringify({ ...merge, status: 'COMPLETED', videoUrl: url }) });
-  } catch (err) {
-    if (!(err instanceof fal.FalError) || err.code === 'UNREACHABLE') throw err;
-    if ((merge.attempts || 1) >= MAX_CLIP_ATTEMPTS) return fail(job, `فشل دمج المقاطع: ${err.message}`);
+  const plan = planOf(job);
+  const merge = legacyStep(parse(job.merge_json), plan.models.merge);
+  if (!merge?.status) return fail(job, 'بيانات دمج المقاطع ناقصة.');
+  if (merge.status === 'RETRY') {
     const clips = parse(job.clips_json) || [];
-    const again = await fal.submit(env.mergeModel(), { video_urls: clips.map((c) => c.videoUrl) });
-    return save(job, { merge_json: JSON.stringify({ ...again, status: 'SUBMITTED', attempts: (merge.attempts || 1) + 1, error: err.message }) });
+    await submitStep(job, merge, plan.models.merge, 'merge', { videoUrls: clips.map((c) => c.url) }, { seconds: plan.seconds });
+    return save(job, { merge_json: JSON.stringify(merge) });
   }
+  const st = await settle(job, merge, 'دمج المقاطع');
+  await save(job, { merge_json: JSON.stringify(merge) });
+  if (st === 'FAILED') return fail(job, `فشل دمج المقاطع: ${merge.error}`);
+  if (st !== 'COMPLETED') return undefined;
+  return afterMerge(job, plan, merge.url);
+}
+
+async function afterMerge(job, plan, videoUrl) {
+  const audio = parse(job.audio_json);
+  if (plan.mode !== 'voiceover' || !audio?.tts?.url) return save(job, { status: 'STORING', progress: 90, provider_video_url: videoUrl });
+  audio.mux = { key: 'mux', videoUrl };
+  await submitStep(job, audio.mux, plan.models.mux, 'mux', { videoUrl, audioUrl: audio.tts.url }, { seconds: plan.seconds });
+  return save(job, { status: 'MIXING', progress: 86, audio_json: JSON.stringify(audio) });
+}
+
+async function pollMix(job) {
+  const plan = planOf(job);
+  const audio = parse(job.audio_json);
+  const mux = audio?.mux;
+  if (!mux) return fail(job, 'بيانات تركيب الصوت ناقصة.');
+  if (mux.status === 'RETRY') {
+    await submitStep(job, mux, plan.models.mux, 'mux', { videoUrl: mux.videoUrl, audioUrl: audio.tts.url }, { seconds: plan.seconds });
+    return save(job, { audio_json: JSON.stringify(audio) });
+  }
+  const st = await settle(job, mux, 'تركيب الصوت');
+  await save(job, { audio_json: JSON.stringify(audio) });
+  if (st === 'FAILED') return fail(job, `فشل تركيب الصوت: ${mux.error}`);
+  if (st !== 'COMPLETED') return undefined;
+  return save(job, { status: 'STORING', progress: 92, provider_video_url: mux.url });
 }
 
 async function storeVideo(job) {
-  const buffer = await fal.download(job.provider_video_url);
-  const stored = await putBuffer(buffer, 'video/mp4', 'videos');
+  const ref = job.provider_video_url;
+  // A video already in our storage (Google returns bytes) is kept as is.
+  if (ref.startsWith('blob:videos/')) {
+    const blob = await prisma.blob.findUnique({ where: { key: ref.slice(5) }, select: { bytes: true } });
+    return save(job, { status: 'COMPLETED', progress: 100, video_key: ref.slice(5), video_bytes: blob?.bytes || null, finished_at: new Date(), error: null });
+  }
+  const stored = await putBuffer(await toBuffer(ref), 'video/mp4', 'videos');
   return save(job, { status: 'COMPLETED', progress: 100, video_key: stored.key, video_bytes: stored.bytes, finished_at: new Date(), error: null });
 }

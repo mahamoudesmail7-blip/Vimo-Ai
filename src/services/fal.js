@@ -4,16 +4,15 @@
 // as returned (a model id with a sub-path, like fal-ai/veo3/fast/…, is polled
 // under a different base path, so building them ourselves would be wrong).
 import { env } from '../config.js';
+import { EngineError } from '../engine/errors.js';
 
 const QUEUE_BASE = 'https://queue.fal.run';
 const RUN_BASE = 'https://fal.run';
 const TIMEOUT_MS = 60000;
 
-export class FalError extends Error {
+export class FalError extends EngineError {
   constructor(message, code = 'FAL_ERROR', httpStatus = null) {
-    super(message);
-    this.code = code;
-    this.httpStatus = httpStatus;
+    super(message, code, httpStatus, 'fal');
   }
 }
 
@@ -150,4 +149,20 @@ export function clipInput(modelId, { prompt, imageUrl, referenceUrls, aspectRati
     return { prompt, image_url: imageUrl, aspect_ratio: aspectRatio, duration: String(seconds >= 10 ? 10 : 5) };
   }
   return { prompt, image_url: imageUrl, aspect_ratio: aspectRatio };
+}
+
+/**
+ * The account's prepaid credit in USD, from fal's Platform API. Needs a key
+ * with the billing read scope; returns null when the key may not read it (the
+ * admin then confirms a budget by hand on the AI Engines page).
+ */
+export async function accountBalance() {
+  try {
+    const data = await call('GET', 'https://api.fal.ai/v1/account/billing?expand=credits', null, 15000);
+    const v = Number(data?.credits?.current_balance);
+    return Number.isFinite(v) ? v : null;
+  } catch (err) {
+    if (err.httpStatus === 401 || err.httpStatus === 403 || err.httpStatus === 404) return null;
+    throw err;
+  }
 }

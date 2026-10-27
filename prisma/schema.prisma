@@ -29,8 +29,8 @@ model User {
   updated_at    DateTime @updatedAt
 
   videos       VideoJob[]
-  topups       TopupRequest[]         @relation("TopupOwner")
-  reviewed     TopupRequest[]         @relation("TopupReviewer")
+  topups       TopupRequest[]      @relation("TopupOwner")
+  reviewed     TopupRequest[]      @relation("TopupReviewer")
   transactions CreditTransaction[]
 
   @@map("users")
@@ -54,21 +54,21 @@ model CreditTransaction {
 
 // status: PENDING | APPROVED | REJECTED
 model TopupRequest {
-  id            Int       @id @default(autoincrement())
-  user_id       Int
-  user          User      @relation("TopupOwner", fields: [user_id], references: [id], onDelete: Cascade)
-  package_key   String
-  videos        Int
-  amount_egp    Int
-  sender_phone  String
-  reference     String? // Vodafone Cash transaction id the user typed
-  receipt_key   String? // optional screenshot, in blobs
-  status        String    @default("PENDING")
-  admin_note    String?
-  reviewed_by   Int?
-  reviewer      User?     @relation("TopupReviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
-  reviewed_at   DateTime?
-  created_at    DateTime  @default(now())
+  id           Int       @id @default(autoincrement())
+  user_id      Int
+  user         User      @relation("TopupOwner", fields: [user_id], references: [id], onDelete: Cascade)
+  package_key  String
+  videos       Int
+  amount_egp   Int
+  sender_phone String
+  reference    String? // Vodafone Cash transaction id the user typed
+  receipt_key  String? // optional screenshot, in blobs
+  status       String    @default("PENDING")
+  admin_note   String?
+  reviewed_by  Int?
+  reviewer     User?     @relation("TopupReviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
+  reviewed_at  DateTime?
+  created_at   DateTime  @default(now())
 
   @@index([status, created_at])
   @@index([user_id])
@@ -88,7 +88,7 @@ model VideoJob {
   description  String?
   offer        String? // price / discount line the CTA says
   voice_gender String  @default("MALE") // MALE | FEMALE
-  style        String  @default("UGC") // UGC | CINEMATIC | SHOWCASE
+  style        String  @default("UGC") // AUTO | UGC | SHOWCASE (CINEMATIC on older videos)
   aspect_ratio String  @default("9:16") // 9:16 | 16:9
   clip_count   Int     @default(3)
   clip_seconds Int     @default(8)
@@ -106,6 +106,18 @@ model VideoJob {
   charged     Boolean @default(false)
   refunded    Boolean @default(false)
   showcase    Boolean @default(false) // admin picked it for the landing page gallery
+
+  // Multi-provider engine. plan_json is fixed when the job is created (the
+  // chosen provider and models never change mid-job, so there is no silent
+  // switch to a pricier engine). Costs are in USD at the catalog prices.
+  provider          String? // fal | higgsfield | google | mock
+  plan_json         String? // { tier, mode, video, image, tts, merge, mux, sceneSeconds, estimate }
+  options_json      String? // { music, pace }
+  extra_image_keys  String? // JSON array of more product photos (references)
+  audio_json        String? // voiceover mode: { tts: step, mux: step }
+  cost_estimate_usd Float?
+  cost_actual_usd   Float   @default(0)
+  client_ref        String? @unique // the browser's idempotency key: one click = one charge
 
   provider_video_url String? // fal CDN url (temporary)
   video_key          String? // our durable copy
@@ -134,4 +146,31 @@ model Blob {
   created_at DateTime @default(now())
 
   @@map("blobs")
+}
+
+// Admin settings as JSON documents (key "engine" = the AI Engines page).
+model Setting {
+  key        String   @id
+  value      String
+  updated_at DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// What every provider call cost, and every provider error, for the AI
+// Engines page and the daily spending limits.
+// kind: CHARGE | ERROR | REFUSED
+model EngineEvent {
+  id         Int      @id @default(autoincrement())
+  job_id     Int?
+  provider   String
+  model      String?
+  kind       String
+  usd        Float    @default(0)
+  message    String?
+  created_at DateTime @default(now())
+
+  @@index([provider, kind, created_at])
+  @@index([created_at])
+  @@map("engine_events")
 }

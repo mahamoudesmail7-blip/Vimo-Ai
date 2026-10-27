@@ -18,6 +18,8 @@ export function errorHandler(err, req, res, next) { // eslint-disable-line no-un
     return res.status(413).json({ error: 'TOO_LARGE', message: 'الملف كبير جدًا.' });
   }
   const status = err?.status || 500;
-  if (status >= 500) console.error('[error]', req.method, req.path, err);
-  res.status(status).json({ error: err?.code || 'SERVER_ERROR', message: status >= 500 ? 'حصل خطأ في السيرفر، جرّب تاني.' : err.message });
+  // An AppError's message is written for the user (a 503 "not available now" too); anything else is a bug.
+  const known = err instanceof AppError;
+  if (!known) console.error('[error]', req.method, req.path, err);
+  res.status(status).json({ error: err?.code || 'SERVER_ERROR', message: known ? err.message : 'حصل خطأ في السيرفر، جرّب تاني.' });
 }
