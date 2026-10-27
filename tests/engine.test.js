@@ -55,6 +55,12 @@ test('silent-only engines make UGC with a voiceover; admin price overrides chang
     assert.deepEqual(plan.sceneSeconds, [10, 10, 5]);
     assert.equal(plan.provider, 'higgsfield');
     assert.ok(plan.estimate.byProvider.fal > 0, 'frames, voice and merge still run on fal');
+    ({ plan } = planVideo({ style: 'UGC', settings: s }));
+    assert.equal(plan.mode, 'speech', 'UGC keeps the talking person while a speech model exists');
+    assert.equal(plan.models.video, 'fal:veo31-lite');
+    s.models['fal:veo31-lite'] = { enabled: false };
+    ({ plan } = planVideo({ style: 'UGC', settings: s }));
+    assert.equal(plan.mode, 'voiceover', 'only silent models left -> UGC with a voiceover');
   } finally {
     delete process.env.HIGGSFIELD_API_KEY; delete process.env.HIGGSFIELD_API_SECRET;
   }
