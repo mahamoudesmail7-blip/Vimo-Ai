@@ -32,13 +32,15 @@ test('a fresh install is on the cheapest tier with a $2 per-video cap', () => {
 test('hybrid (on by default): one AI clip + photo scenes, under $0.5 on the economy tier', async () => {
   process.env.FAL_KEY = 'k';
   const { hybridSeconds } = await import('../src/engine/planner.js');
-  assert.deepEqual(hybridSeconds([4, 6, 8]), [8, 8, 8]);
-  assert.deepEqual(hybridSeconds([5, 10]), [10, 7, 7]);
+  assert.deepEqual(hybridSeconds([4, 6, 8]), [4, 7, 7, 6]);
+  assert.deepEqual(hybridSeconds([5, 10]), [5, 7, 6, 6]);
+  assert.deepEqual(hybridSeconds([8]), [8, 8, 8]);
   const s = only(['fal'], { hybrid: true });
   assert.equal(defaults().hybrid, true);
   const { plan } = planVideo({ style: 'AUTO', settings: s });
   assert.equal(plan.mode, 'hybrid');
-  assert.ok(plan.estimate.totalUsd < 0.5, `$${plan.estimate.totalUsd}`);
+  assert.ok(plan.estimate.totalUsd < 0.25, `$${plan.estimate.totalUsd}`);
+  assert.equal(plan.models.image, 'fal:nano-banana', 'the cheaper first-frame model');
   assert.deepEqual(plan.estimate.lines.map((l) => l.step).sort(), ['image', 'script', 'tts', 'video']);
   assert.equal(planVideo({ style: 'UGC', settings: s }).plan.mode, 'speech', 'UGC is never a slideshow');
 });

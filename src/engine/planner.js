@@ -60,12 +60,17 @@ function modesFor(style, model, tierHasSpeech) {
   return ['voiceover'];
 }
 
-/** Hybrid: one AI clip as close to 8s as the model allows, the rest in photo scenes. */
+/**
+ * Hybrid: the shortest AI clip the model makes (at least 4s, it is paid per
+ * second), then photo scenes of at most 8s each for the rest.
+ */
 export function hybridSeconds(durations, target = TARGET_SECONDS) {
-  const clip = [...durations].sort((a, b) => Math.abs(a - 8) - Math.abs(b - 8) || a - b)[0];
+  const fit = durations.filter((d) => d >= 4);
+  const clip = fit.length ? Math.min(...fit) : Math.max(...durations);
   const rest = Math.max(4, target - clip);
-  const first = Math.ceil(rest / 2);
-  return [clip, first, rest - first];
+  const n = Math.ceil(rest / 8);
+  const each = Math.floor(rest / n);
+  return [clip, ...Array.from({ length: n }, (_, i) => each + (i < rest - each * n ? 1 : 0))];
 }
 
 /**
@@ -77,7 +82,9 @@ export function planVideo({ style = 'AUTO', pace = 'fast', settings, preferRefer
   const videos = models.filter((m) => m.kind === 'video' && m.tier === tier);
   if (!videos.length) return { error: `مفيش موديل فيديو شغال في فئة ${tier}.` };
 
-  const image = env.keyframeModel() ? cheapest(models, 'image', (m) => m.usdPerUnit) : null;
+  // First-frame models are matched to the tier (Pro for standard/premium), else the cheapest.
+  const tierImages = models.filter((m) => m.kind === 'image' && (!m.tiers || m.tiers.includes(tier)));
+  const image = !env.keyframeModel() ? null : cheapest(tierImages.length ? tierImages : models, 'image', (m) => m.usdPerUnit);
   const tts = cheapest(models, 'tts', (m) => m.usdPer1kChars);
   const merge = cheapest(models, 'merge', (m) => m.usdPerSecond.silent);
   const mux = cheapest(models, 'mux', (m) => m.usdPerSecond.silent);

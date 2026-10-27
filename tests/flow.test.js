@@ -335,7 +335,7 @@ test('engine: voiceover mode, idempotent orders, spending limits, balance gate, 
   assert.equal(await credits(), 7);
 });
 
-test('hybrid: one AI clip + the real product photos under the voiceover, ~$0.45 a video', { skip }, async () => {
+test('hybrid: one AI clip + the real product photos under the voiceover, ~$0.21 a video', { skip }, async () => {
   const { saveSettings } = await import('../src/engine/settings.js');
   await saveSettings({ tier: 'economy', perVideoMaxUsd: 0.5, hybrid: true });
   fake.realMedia = true;
@@ -358,10 +358,10 @@ test('hybrid: one AI clip + the real product photos under the voiceover, ~$0.45 
     const clips = subs.filter((x) => x.model.startsWith('fal-ai/veo3.1/lite'));
     assert.equal(clips.length, 1, 'only one paid AI clip');
     assert.equal(clips[0].body.generate_audio, false);
-    assert.equal(subs.filter((x) => x.model.includes('nano-banana')).length, 1, 'one first frame');
+    assert.equal(subs.filter((x) => x.model === 'fal-ai/nano-banana/edit').length, 1, 'one cheap first frame');
     assert.equal(subs.filter((x) => x.model.includes('merge')).length, 0, 'joined on our server, not on fal');
     assert.ok(subs.some((x) => x.model.includes('elevenlabs')));
-    assert.ok(job.cost_actual_usd <= 0.5 && job.cost_actual_usd > 0.3, `actual $${job.cost_actual_usd}`);
+    assert.ok(job.cost_actual_usd <= 0.25 && job.cost_actual_usd > 0.15, `actual $${job.cost_actual_usd}`);
     r = await user('GET', `/api/videos/${job.id}/video`);
     assert.equal(r.status, 200);
     assert.ok(r.data.length > 20000, 'a real 24s mp4');
