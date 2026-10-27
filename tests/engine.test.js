@@ -20,6 +20,15 @@ test('scene lengths reach ~24s with each model\'s clip durations', () => {
   assert.deepEqual(sceneSeconds([6, 10]), [6, 6, 6, 6]);
 });
 
+test('a fresh install is on the cheapest tier with a $2 per-video cap', () => {
+  process.env.FAL_KEY = 'k';
+  const s = only(['fal']);
+  assert.equal(s.tier, 'economy');
+  const { plan } = planVideo({ style: 'UGC', settings: s });
+  assert.equal(plan.models.video, 'fal:veo31-lite');
+  assert.ok(plan.estimate.totalUsd <= s.perVideoMaxUsd, `$${plan.estimate.totalUsd} fits the $2 cap`);
+});
+
 test('the planner picks the cheapest compatible model in the tier, and never another tier', () => {
   process.env.FAL_KEY = 'k';
   const s = only(['fal']);

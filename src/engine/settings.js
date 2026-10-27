@@ -14,9 +14,10 @@ export function mockAllowed() {
 
 export function defaults() {
   return {
-    tier: 'standard', // the quality tier every new video uses
-    perVideoMaxUsd: 5,
-    perDayMaxUsd: 50,
+    // Cheapest by default (Veo 3.1 Lite, ~$1.2-1.7 a video); the admin can raise it.
+    tier: 'economy', // the quality tier every new video uses
+    perVideoMaxUsd: 2,
+    perDayMaxUsd: 20,
     providers: {
       fal: { enabled: true, priority: 1, dailyMaxUsd: 50, confirmedBalanceUsd: null, confirmedAt: null },
       higgsfield: { enabled: true, priority: 2, dailyMaxUsd: 30, confirmedBalanceUsd: null, confirmedAt: null },
