@@ -48,10 +48,13 @@ export function sceneSeconds(durations, target = TARGET_SECONDS) {
 
 const cheapest = (models, kind, costOf) => models.filter((m) => m.kind === kind).sort((a, b) => costOf(a) - costOf(b))[0] || null;
 
-function modesFor(style, model) {
+// UGC is a person talking on camera: while any model in the tier can make
+// speech, a cheaper silent model must not turn it into a voiceover.
+function modesFor(style, model, tierHasSpeech) {
   if (style === 'SHOWCASE') return ['voiceover'];
   if (style === 'AUTO') return model.audio ? ['speech', 'voiceover'] : ['voiceover'];
-  return model.audio ? ['speech'] : ['voiceover']; // UGC (and older CINEMATIC jobs)
+  if (tierHasSpeech) return model.audio ? ['speech'] : []; // UGC (and older CINEMATIC jobs)
+  return ['voiceover'];
 }
 
 /**
@@ -69,10 +72,11 @@ export function planVideo({ style = 'AUTO', pace = 'fast', settings, preferRefer
   const mux = cheapest(models, 'mux', (m) => m.usdPerSecond.silent);
 
   const options = [];
+  const tierHasSpeech = videos.some((v) => v.audio);
   for (const video of videos) {
     const secs = sceneSeconds(video.durations, target);
     const total = secs.reduce((a, b) => a + b, 0);
-    for (const mode of modesFor(style, video)) {
+    for (const mode of modesFor(style, video, tierHasSpeech)) {
       if (mode === 'voiceover' && (!tts || !mux)) continue;
       if (secs.length > 1 && !merge) continue;
       const lines = [];

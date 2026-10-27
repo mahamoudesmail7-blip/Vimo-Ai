@@ -75,7 +75,7 @@ before(async () => {
   server = createApp().listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
   // The real-provider path: the free mock engine is off, fal is the engine.
-  await (await import('../src/engine/settings.js')).saveSettings({ providers: { mock: { enabled: false } } });
+  await (await import('../src/engine/settings.js')).saveSettings({ tier: 'standard', perVideoMaxUsd: 5, perDayMaxUsd: 50, providers: { mock: { enabled: false } } });
 });
 after(async () => { server?.close(); await prisma?.$disconnect(); });
 
