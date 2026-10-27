@@ -11,7 +11,7 @@ import google from '../src/engine/providers/google.js';
 import { findModel } from '../src/engine/catalog.js';
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-const only = (on) => { const s = defaults(); for (const p of Object.keys(s.providers)) s.providers[p].enabled = on.includes(p); return s; };
+const only = (on, { hybrid = false } = {}) => { const s = defaults(); s.hybrid = hybrid; for (const p of Object.keys(s.providers)) s.providers[p].enabled = on.includes(p); return s; };
 
 test('scene lengths reach ~24s with each model\'s clip durations', () => {
   assert.deepEqual(sceneSeconds([4, 6, 8]), [8, 8, 8]);
@@ -27,6 +27,20 @@ test('a fresh install is on the cheapest tier with a $2 per-video cap', () => {
   const { plan } = planVideo({ style: 'UGC', settings: s });
   assert.equal(plan.models.video, 'fal:veo31-lite');
   assert.ok(plan.estimate.totalUsd <= s.perVideoMaxUsd, `$${plan.estimate.totalUsd} fits the $2 cap`);
+});
+
+test('hybrid (on by default): one AI clip + photo scenes, under $0.5 on the economy tier', async () => {
+  process.env.FAL_KEY = 'k';
+  const { hybridSeconds } = await import('../src/engine/planner.js');
+  assert.deepEqual(hybridSeconds([4, 6, 8]), [8, 8, 8]);
+  assert.deepEqual(hybridSeconds([5, 10]), [10, 7, 7]);
+  const s = only(['fal'], { hybrid: true });
+  assert.equal(defaults().hybrid, true);
+  const { plan } = planVideo({ style: 'AUTO', settings: s });
+  assert.equal(plan.mode, 'hybrid');
+  assert.ok(plan.estimate.totalUsd < 0.5, `$${plan.estimate.totalUsd}`);
+  assert.deepEqual(plan.estimate.lines.map((l) => l.step).sort(), ['image', 'script', 'tts', 'video']);
+  assert.equal(planVideo({ style: 'UGC', settings: s }).plan.mode, 'speech', 'UGC is never a slideshow');
 });
 
 test('the planner picks the cheapest compatible model in the tier, and never another tier', () => {

@@ -164,7 +164,7 @@ async function renderVideos(view) {
 // ---------------------------------------------------------------------------
 const TIER = { economy: 'اقتصادي', standard: 'قياسي', premium: 'ممتاز' };
 const KIND = { video: 'فيديو', image: 'أول فريم', tts: 'تعليق صوتي', merge: 'دمج', mux: 'تركيب صوت' };
-const MODE = { speech: 'الكلام جوه الفيديو', voiceover: 'فيديو صامت + تعليق صوتي' };
+const MODE = { speech: 'الكلام جوه الفيديو', voiceover: 'فيديو صامت + تعليق صوتي', hybrid: 'مختلط: مشهد AI + صور المنتج + تعليق صوتي' };
 const STYLE = { AUTO: 'تلقائي', UGC: 'شخص بيتكلم', SHOWCASE: 'عرض المنتج' };
 const BAL_SRC = { live: 'مباشر من المزود', confirmed: 'متأكد يدويًا', unconfirmed: 'مش متأكد', 'provider-refused': 'المزود رفض: الرصيد خلص' };
 const usd = (n) => (n === null || n === undefined ? '—' : `$${Number(n).toFixed(n < 1 ? 3 : 2)}`);
@@ -195,6 +195,7 @@ async function renderEngines(view, data = null) {
         <div class="field" style="margin:0"><label>فئة الجودة</label><select id="tier" style="width:150px">${Object.entries(TIER).map(([k, l]) => `<option value="${k}" ${e.settings.tier === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="field" style="margin:0"><label>أقصى تكلفة للفيديو ($)</label>${num('id="perVideo"', e.settings.perVideoMaxUsd)}</div>
         <div class="field" style="margin:0"><label>أقصى صرف في اليوم ($)</label>${num('id="perDay"', e.settings.perDayMaxUsd)}</div>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="hybrid" ${e.settings.hybrid !== false ? 'checked' : ''} /> الفيديو المختلط (الأرخص)</label>
         <div class="stat" style="padding:10px 14px"><div class="k">اتصرف النهارده</div><div class="v" style="font-size:20px" dir="ltr">${usd(e.spentTodayUsd)}</div></div>
       </div>
     </div>
@@ -246,7 +247,7 @@ async function renderEngines(view, data = null) {
 
   const n = (el) => (el && el.value !== '' ? Number(el.value) : undefined);
   $('#saveEngines').onclick = async () => {
-    const patch = { tier: $('#tier').value, perVideoMaxUsd: n($('#perVideo')), perDayMaxUsd: n($('#perDay')), providers: {}, models: {} };
+    const patch = { tier: $('#tier').value, hybrid: $('#hybrid').checked, perVideoMaxUsd: n($('#perVideo')), perDayMaxUsd: n($('#perDay')), providers: {}, models: {} };
     for (const p of providers) {
       const c = $(`[data-p-confirm="${p.id}"]`);
       patch.providers[p.id] = {

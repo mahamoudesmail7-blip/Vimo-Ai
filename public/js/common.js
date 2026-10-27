@@ -67,6 +67,7 @@ export const STATUS = {
   GENERATING: ['بنصوّر المشاهد', 'run'],
   MERGING: ['بنجمع الفيديو', 'run'],
   MIXING: ['بنركّب الصوت', 'run'],
+  COMPOSING: ['بنجمّع الفيديو', 'run'],
   STORING: ['بنجهز التحميل', 'run'],
   COMPLETED: ['جاهز', 'ok'],
   FAILED: ['فشل', 'bad'],

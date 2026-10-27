@@ -37,10 +37,15 @@ async function fakeFetch(url, opts = {}) {
     if (sub.model.includes('elevenlabs')) return json(200, { audio: { url: `https://cdn.fake/${rs[1]}.mp3` } });
     return json(200, { video: { url: `https://cdn.fake/${rs[1]}.mp4` } });
   }
-  if (url.startsWith('https://cdn.fake/')) return new Response(Buffer.from('FAKE-MP4-BYTES-0123456789'), { status: 200 });
+  if (url.startsWith('https://cdn.fake/')) {
+    if (fake.realMedia) return new Response(url.endsWith('.jpg') ? Buffer.from(PNG_REAL.split(',')[1], 'base64') : (await import('../src/engine/media.js')).mockVideo(), { status: 200 });
+    return new Response(Buffer.from('FAKE-MP4-BYTES-0123456789'), { status: 200 });
+  }
   throw new Error(`unexpected fetch ${url}`);
 }
 
+// A real image for the hybrid render (ffmpeg needs to decode it)
+const PNG_REAL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAABAAAAAQBPJcTWAAAAeUlEQVR4nO3PwQkAIBDAsBvCSV3er0P4CEKhA6Rz9vq64YIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALHrsMNtFaUQqPygAAAABJRU5ErkJggg==';
 const PNG = 'data:image/png;base64,' + Buffer.from('\x89PNG\r\n\x1a\nfake').toString('base64');
 
 function client() {
@@ -75,7 +80,7 @@ before(async () => {
   server = createApp().listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
   // The real-provider path: the free mock engine is off, fal is the engine.
-  await (await import('../src/engine/settings.js')).saveSettings({ tier: 'standard', perVideoMaxUsd: 5, perDayMaxUsd: 50, providers: { mock: { enabled: false } } });
+  await (await import('../src/engine/settings.js')).saveSettings({ tier: 'standard', perVideoMaxUsd: 5, perDayMaxUsd: 50, hybrid: false, providers: { mock: { enabled: false } } });
 });
 after(async () => { server?.close(); await prisma?.$disconnect(); });
 
@@ -328,4 +333,40 @@ test('engine: voiceover mode, idempotent orders, spending limits, balance gate, 
   assert.equal(r.status, 200);
   assert.ok(r.data.length > 1000, 'a real (tiny) mp4 to play in the browser');
   assert.equal(await credits(), 7);
+});
+
+test('hybrid: one AI clip + the real product photos under the voiceover, ~$0.45 a video', { skip }, async () => {
+  const { saveSettings } = await import('../src/engine/settings.js');
+  await saveSettings({ tier: 'economy', perVideoMaxUsd: 0.5, hybrid: true });
+  fake.realMedia = true;
+  try {
+    const user = client();
+    const admin = client();
+    await admin('POST', '/api/auth/login', { email: 'boss@test.dev', password: 'secret123' });
+    let r = await user('POST', '/api/auth/signup', { name: 'Salma', email: 'salma@test.dev', password: 'secret123' });
+    await admin('POST', `/api/admin/users/${r.data.user.id}/credits`, { delta: 1 });
+    r = await admin('GET', '/api/admin/engines');
+    assert.equal(r.data.plans.AUTO.mode, 'hybrid');
+    assert.ok(r.data.plans.AUTO.estimate.totalUsd <= 0.5, `$${r.data.plans.AUTO.estimate.totalUsd}`);
+
+    const start = fake.submitted.length;
+    r = await user('POST', '/api/videos', { description: 'زجاجة مياه حرارية ستانلس', images: [PNG_REAL, PNG_REAL] });
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    const job = await settle(r.data.id, 30);
+    assert.equal(job.status, 'COMPLETED', job.error);
+    const subs = fake.submitted.slice(start);
+    const clips = subs.filter((x) => x.model.startsWith('fal-ai/veo3.1/lite'));
+    assert.equal(clips.length, 1, 'only one paid AI clip');
+    assert.equal(clips[0].body.generate_audio, false);
+    assert.equal(subs.filter((x) => x.model.includes('nano-banana')).length, 1, 'one first frame');
+    assert.equal(subs.filter((x) => x.model.includes('merge')).length, 0, 'joined on our server, not on fal');
+    assert.ok(subs.some((x) => x.model.includes('elevenlabs')));
+    assert.ok(job.cost_actual_usd <= 0.5 && job.cost_actual_usd > 0.3, `actual $${job.cost_actual_usd}`);
+    r = await user('GET', `/api/videos/${job.id}/video`);
+    assert.equal(r.status, 200);
+    assert.ok(r.data.length > 20000, 'a real 24s mp4');
+  } finally {
+    fake.realMedia = false;
+    await saveSettings({ tier: 'standard', perVideoMaxUsd: 5, hybrid: false });
+  }
 });

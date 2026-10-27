@@ -5,7 +5,8 @@
 //   QUEUED -> SCRIPTING -> GENERATING (per scene, in parallel: a realistic
 //          first frame with the exact product, then the clip from that frame;
 //          plus the voiceover in voiceover mode)
-//          -> MERGING (join the clips) -> MIXING (voiceover mode: lay the
+//          -> MERGING (join the clips) | COMPOSING (hybrid: AI clip + photo
+//          scenes joined on our server) -> MIXING (voiceover mode: lay the
 //          voice over the video) -> STORING (copy to our storage) -> COMPLETED
 //
 // The plan (provider, models, scene lengths) is fixed at order time. Each tick
@@ -23,6 +24,7 @@ import { modelByEndpoint } from '../engine/catalog.js';
 import { recordEvent } from '../engine/budget.js';
 import { EngineError, isTransient } from '../engine/errors.js';
 import { toBuffer } from '../engine/media.js';
+import { composeHybrid } from '../engine/compose.js';
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
 const MAX_CLIP_ATTEMPTS = 2;
@@ -277,6 +279,7 @@ async function advance(job) {
     case 'GENERATING': return pollClips(job);
     case 'MERGING': return pollMerge(job);
     case 'MIXING': return pollMix(job);
+    case 'COMPOSING': return composeJob(job);
     case 'STORING': return storeVideo(job);
     default: return undefined;
   }
@@ -310,9 +313,11 @@ async function startJob(job) {
   }
   const videoModel = plan.models.video;
   const withScene = /ref/.test(videoModel);
-  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product, withScene, mode: plan.mode, music: options.music, pace: options.pace };
+  const hybrid = plan.mode === 'hybrid';
+  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product, withScene, mode: hybrid ? 'voiceover' : plan.mode, music: options.music, pace: options.pace };
   const withFrames = Boolean(plan.models.image);
-  const clips = script.scenes.map((scene, index) => ({
+  // Hybrid: only the first scene is an AI clip; the others are photo scenes rendered at the end.
+  const clips = script.scenes.map((scene, index) => (hybrid && index > 0 ? { key: `photo${index}`, index, kind: 'photo', seconds: plan.sceneSeconds[index], status: 'COMPLETED' } : {
     key: `clip${index}`,
     index,
     seconds: plan.sceneSeconds[index] || plan.sceneSeconds[0],
@@ -321,7 +326,7 @@ async function startJob(job) {
     status: withFrames ? 'WAITING_FRAME' : 'PENDING',
     attempts: 0,
   }));
-  const audio = plan.mode === 'voiceover'
+  const audio = plan.mode !== 'speech'
     ? { tts: { key: 'tts', text: script.scenes.map((s) => s.voiceover).join(' ... '), status: 'PENDING', attempts: 0 } }
     : null;
   job = await save(job, { script_json: JSON.stringify(script), clips_json: JSON.stringify(clips), audio_json: audio ? JSON.stringify(audio) : null, status: 'GENERATING', progress: 10 });
@@ -412,6 +417,10 @@ async function pollClips(job, images = null) {
 
   if (!clips.length || !clips.every((c) => c.status === 'COMPLETED')) return undefined;
   if (audio?.tts && audio.tts.status !== 'COMPLETED') return undefined;
+  if (plan.mode === 'hybrid') {
+    job = await save(job, { status: 'COMPOSING', progress: 85 });
+    return composeJob(job);
+  }
   if (clips.length === 1) return afterMerge(job, plan, clips[0].url);
 
   const merge = { key: 'merge' };
@@ -467,5 +476,22 @@ async function storeVideo(job) {
     return save(job, { status: 'COMPLETED', progress: 100, video_key: ref.slice(5), video_bytes: blob?.bytes || null, finished_at: new Date(), error: null });
   }
   const stored = await putBuffer(await toBuffer(ref), 'video/mp4', 'videos');
+  return save(job, { status: 'COMPLETED', progress: 100, video_key: stored.key, video_bytes: stored.bytes, finished_at: new Date(), error: null });
+}
+
+// Hybrid: the AI clip, then the real product photos (and the AI first frame)
+// with camera moves, under the voiceover. Rendered here, so it costs nothing.
+async function composeJob(job) {
+  const clips = parse(job.clips_json) || [];
+  const audio = parse(job.audio_json);
+  const ai = clips.find((c) => c.kind !== 'photo');
+  if (!ai?.url) return fail(job, 'المشهد الأساسي ناقص.');
+  const photos = [...await productImages(job), ...(ai.frame?.status === 'COMPLETED' && ai.frame.url ? [ai.frame.url] : [])];
+  const buffer = await composeHybrid({
+    clipUrl: ai.url, clipSeconds: ai.seconds, photos,
+    photoSeconds: clips.filter((c) => c.kind === 'photo').map((c) => c.seconds),
+    audioUrl: audio?.tts?.url || null, aspectRatio: job.aspect_ratio,
+  });
+  const stored = await putBuffer(buffer, 'video/mp4', 'videos');
   return save(job, { status: 'COMPLETED', progress: 100, video_key: stored.key, video_bytes: stored.bytes, finished_at: new Date(), error: null });
 }

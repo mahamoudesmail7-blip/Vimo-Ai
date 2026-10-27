@@ -18,6 +18,7 @@ export function defaults() {
     tier: 'economy', // the quality tier every new video uses
     perVideoMaxUsd: 2,
     perDayMaxUsd: 20,
+    hybrid: true, // allow the one-AI-clip + product-photo production (cheapest)
     providers: {
       fal: { enabled: true, priority: 1, dailyMaxUsd: 50, confirmedBalanceUsd: null, confirmedAt: null },
       higgsfield: { enabled: true, priority: 2, dailyMaxUsd: 30, confirmedBalanceUsd: null, confirmedAt: null },
@@ -40,7 +41,7 @@ export async function loadSettings() {
   const d = defaults();
   const value = {
     ...d,
-    ...pick(stored, ['tier', 'perVideoMaxUsd', 'perDayMaxUsd']),
+    ...pick(stored, ['tier', 'perVideoMaxUsd', 'perDayMaxUsd', 'hybrid']),
     providers: Object.fromEntries(PROVIDERS.map((p) => [p, { ...d.providers[p], ...(stored.providers?.[p] || {}) }])),
     models: stored.models || {},
   };
@@ -57,6 +58,7 @@ export async function saveSettings(patch) {
   const cur = await loadSettings();
   const next = structuredClone(cur);
   if (TIERS.includes(patch.tier)) next.tier = patch.tier;
+  if (typeof patch.hybrid === 'boolean') next.hybrid = patch.hybrid;
   for (const k of ['perVideoMaxUsd', 'perDayMaxUsd']) if (money(patch[k]) !== undefined) next[k] = money(patch[k]);
   for (const p of PROVIDERS) {
     const src = patch.providers?.[p];

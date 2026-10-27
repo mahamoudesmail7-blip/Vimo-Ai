@@ -113,7 +113,7 @@ const SYSTEM = [
 function scriptRequest({ productName, description, offer, style, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech' }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
   const secs = Array.from({ length: clipCount }, (_, i) => sceneSeconds?.[i] || env.clipSeconds());
-  const voiceover = mode === 'voiceover';
+  const voiceover = mode === 'voiceover' || mode === 'hybrid';
   const speaker = voiceGender === 'FEMALE' ? 'a young Egyptian woman (around 25-35)' : 'a young Egyptian man (around 25-35)';
   return [
     `Product name: ${productName}`,
