@@ -45,4 +45,23 @@ router.post('/logout', (req, res) => { clearSession(res); res.json({ ok: true })
 
 router.get('/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }));
 
+// حسابي: name and phone, and a password change that needs the current password.
+const profileSchema = z.object({
+  name: z.string().trim().min(2, 'اكتب اسمك.').max(80),
+  phone: z.string().trim().max(20).optional().or(z.literal('')),
+});
+router.patch('/me', requireAuth, asyncRoute(async (req, res) => {
+  const body = profileSchema.parse(req.body || {});
+  const user = await prisma.user.update({ where: { id: req.user.id }, data: { name: body.name, phone: body.phone || null } });
+  res.json({ user: publicUser(user) });
+}));
+
+router.post('/password', requireAuth, limiter, asyncRoute(async (req, res) => {
+  const current = String(req.body?.currentPassword || '');
+  const next = z.string().min(8, 'كلمة المرور الجديدة لازم تكون 8 حروف على الأقل.').max(100).parse(String(req.body?.newPassword || ''));
+  if (!(await bcrypt.compare(current, req.user.password_hash))) throw new AppError('كلمة المرور الحالية غلط.', 400, 'BAD_CREDENTIALS');
+  await prisma.user.update({ where: { id: req.user.id }, data: { password_hash: await bcrypt.hash(next, 10) } });
+  res.json({ ok: true });
+}));
+
 export default router;

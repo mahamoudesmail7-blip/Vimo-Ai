@@ -15,10 +15,11 @@ const skip = !DB && 'TEST_DATABASE_URL not set';
 let server, base, prisma, fal, processDueJobs;
 
 // --- fake fal queue: each request is IN_PROGRESS on its first poll, then COMPLETED
-const fake = { submitted: [], polls: {}, failClips: false, mergeInputs: [] };
+const fake = { submitted: [], polls: {}, failClips: false, mergeInputs: [], balance: 100, billingStatus: 200 };
 async function fakeFetch(url, opts = {}) {
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   if (url.startsWith('https://fal.run/')) return json(500, { detail: 'no LLM in tests' }); // script falls back to the template
+  if (url.startsWith('https://api.fal.ai/v1/account/billing')) return fake.billingStatus === 200 ? json(200, { credits: { current_balance: fake.balance } }) : json(fake.billingStatus, { detail: 'missing scope' });
   if (opts.method === 'POST' && url.startsWith('https://queue.fal.run/')) {
     const id = `req${fake.submitted.length + 1}`;
     const body = JSON.parse(opts.body);
@@ -33,6 +34,7 @@ async function fakeFetch(url, opts = {}) {
     const sub = fake.submitted.find((s) => s.id === rs[1]);
     if (!sub.body.video_urls && fake.failClips) return json(422, { detail: 'content policy' });
     if (sub.model.includes('nano-banana')) return json(200, { images: [{ url: `https://cdn.fake/${rs[1]}.jpg` }] });
+    if (sub.model.includes('elevenlabs')) return json(200, { audio: { url: `https://cdn.fake/${rs[1]}.mp3` } });
     return json(200, { video: { url: `https://cdn.fake/${rs[1]}.mp4` } });
   }
   if (url.startsWith('https://cdn.fake/')) return new Response(Buffer.from('FAKE-MP4-BYTES-0123456789'), { status: 200 });
@@ -66,11 +68,14 @@ before(async () => {
   ({ prisma } = await import('../src/db.js'));
   fal = await import('../src/services/fal.js');
   fal.setFetch(fakeFetch);
+  (await import('../src/engine/media.js')).setFetch(fakeFetch);
   ({ processDueJobs } = await import('../src/services/videoJob.js'));
-  for (const t of ['credit_transactions', 'topup_requests', 'video_jobs', 'blobs', 'users']) await prisma.$executeRawUnsafe(`DELETE FROM "${t}"`);
+  for (const t of ['engine_events', 'settings', 'credit_transactions', 'topup_requests', 'video_jobs', 'blobs', 'users']) await prisma.$executeRawUnsafe(`DELETE FROM "${t}"`);
   const { createApp } = await import('../src/server.js');
   server = createApp().listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
+  // The real-provider path: the free mock engine is off, fal is the engine.
+  await (await import('../src/engine/settings.js')).saveSettings({ providers: { mock: { enabled: false } } });
 });
 after(async () => { server?.close(); await prisma?.$disconnect(); });
 
@@ -133,7 +138,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   // failure path: every frame and clip is rejected -> frames fall back to the
   // product photo, each clip is retried once, then FAILED + refund
   fake.failClips = true;
-  r = await user('POST', '/api/videos', { productName: 'ساعة', image: PNG });
+  r = await user('POST', '/api/videos', { productName: 'ساعة', image: PNG, style: 'UGC' });
   const bad = await settle(r.data.id);
   fake.failClips = false;
   assert.equal(bad.status, 'FAILED');
@@ -154,14 +159,14 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   r = await user('GET', '/api/auth/me');
   assert.equal(r.data.user.credits, 2, 'preview costs nothing');
 
-  r = await user('POST', '/api/videos', { productName: 'ساعة', image: PNG, script: { scenes: [{ voiceover: 'سطر واحد' }] } });
+  r = await user('POST', '/api/videos', { productName: 'ساعة', image: PNG, style: 'UGC', script: { scenes: [{ voiceover: 'سطر واحد' }] } });
   assert.equal(r.status, 400, 'wrong scene count refused');
   r = await user('GET', '/api/auth/me');
   assert.equal(r.data.user.credits, 2, 'refused request charges nothing');
 
   const edited = [{ voiceover: 'الساعة دي فخامة بجد!' }, { voiceover: 'ستانلس ومقاومة للمية.' }, { voiceover: 'بـ 300 جنيه بس، اطلبها!' }];
   const before = fake.submitted.length;
-  r = await user('POST', '/api/videos', { productName: 'ساعة', image: PNG, script: { scenes: edited } });
+  r = await user('POST', '/api/videos', { productName: 'ساعة', image: PNG, style: 'UGC', script: { scenes: edited } });
   assert.equal(r.status, 201);
   const mine = await settle(r.data.id);
   assert.equal(mine.status, 'COMPLETED');
@@ -204,7 +209,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   try {
     await admin('POST', `/api/admin/users/${(await user('GET', '/api/auth/me')).data.user.id}/credits`, { delta: 1, note: 'test' });
     const start = fake.submitted.length;
-    r = await user('POST', '/api/videos', { productName: 'جهاز', image: PNG });
+    r = await user('POST', '/api/videos', { productName: 'جهاز', image: PNG, style: 'UGC' });
     assert.equal(r.status, 201);
     const ing = await settle(r.data.id);
     assert.equal(ing.status, 'COMPLETED', ing.error);
@@ -215,4 +220,112 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   } finally {
     delete process.env.VIMO_VIDEO_MODE;
   }
+});
+
+test('engine: voiceover mode, idempotent orders, spending limits, balance gate, mock engine, admin page', { skip }, async () => {
+  const { saveSettings } = await import('../src/engine/settings.js');
+  const { clearBalanceCache } = await import('../src/engine/budget.js');
+  const user = client();
+  const admin = client();
+  await admin('POST', '/api/auth/login', { email: 'boss@test.dev', password: 'secret123' });
+  let r = await user('POST', '/api/auth/signup', { name: 'Omar', email: 'omar@test.dev', password: 'secret123' });
+  const uid = r.data.user.id;
+  await admin('POST', `/api/admin/users/${uid}/credits`, { delta: 10 });
+  const credits = async () => (await user('GET', '/api/auth/me')).data.user.credits;
+
+  r = await user('GET', '/api/admin/engines');
+  assert.equal(r.status, 403);
+  r = await admin('GET', '/api/admin/engines');
+  assert.equal(r.status, 200);
+  assert.equal(r.data.plans.UGC.mode, 'speech');
+  assert.equal(r.data.plans.AUTO.mode, 'voiceover', 'AUTO picks the cheaper silent clips + voiceover');
+  assert.ok(r.data.plans.AUTO.estimate.totalUsd < r.data.plans.UGC.estimate.totalUsd);
+  assert.equal(JSON.stringify(r.data).includes('test-key'), false, 'no key reaches the browser');
+
+  r = await user('GET', '/api/videos/quote');
+  assert.deepEqual({ c: r.data.credits, s: r.data.seconds, a: r.data.available }, { c: 1, s: 24, a: true });
+  assert.equal(JSON.stringify(r.data).match(/fal|veo|usd/i), null, 'the customer sees no provider or dollar');
+
+  // AUTO = silent clips + one Egyptian voiceover laid over the joined video, two product photos as references
+  const start = fake.submitted.length;
+  r = await user('POST', '/api/videos', { description: 'سماعة بلوتوث بعزل ضوضاء', images: [PNG, PNG], clientRef: 'order-0001-abc' });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  assert.equal(r.data.productName, 'سماعة بلوتوث بعزل ضوضاء');
+  const again = await user('POST', '/api/videos', { description: 'سماعة بلوتوث بعزل ضوضاء', images: [PNG, PNG], clientRef: 'order-0001-abc' });
+  assert.equal(again.data.id, r.data.id, 'the same click twice is one order');
+  assert.equal(await credits(), 9, 'charged once');
+  const vo = await settle(r.data.id);
+  assert.equal(vo.status, 'COMPLETED', vo.error);
+  const subs = fake.submitted.slice(start);
+  const clips = subs.filter((x) => x.model === 'fal-ai/veo3.1/fast/image-to-video');
+  assert.equal(clips.length, 3);
+  assert.ok(clips.every((x) => x.body.generate_audio === false && /Nobody speaks/.test(x.body.prompt)));
+  assert.ok(subs.filter((x) => x.model.includes('nano-banana')).every((x) => x.body.image_urls.length === 2), 'every photo is a reference for the first frame');
+  const tts = subs.find((x) => x.model === 'fal-ai/elevenlabs/tts/eleven-v3');
+  assert.ok(tts && tts.body.language_code === 'ar' && tts.body.text.length > 20);
+  const mux = subs.find((x) => x.model === 'fal-ai/ffmpeg-api/merge-audio-video');
+  assert.ok(mux && mux.body.audio_url.endsWith('.mp3') && mux.body.video_url.startsWith('https://cdn.fake/'));
+  assert.ok(vo.cost_actual_usd > 2.4 && Math.abs(vo.cost_actual_usd - vo.cost_estimate_usd) < 0.05, `actual ${vo.cost_actual_usd} vs estimate ${vo.cost_estimate_usd}`);
+  assert.equal(vo.provider, 'fal');
+
+  // per-video limit: refused before any charge
+  await saveSettings({ perVideoMaxUsd: 0.5 });
+  r = await user('POST', '/api/videos', { description: 'ساعة ذكية', image: PNG });
+  assert.equal(r.status, 503);
+  assert.match(r.data.message, /مش متاح دلوقتي/);
+  assert.equal(r.data.message.includes('$'), false, 'the customer gets no cost details');
+  assert.equal(await credits(), 9);
+  await saveSettings({ perVideoMaxUsd: 5 });
+
+  // not enough live balance at fal
+  fake.balance = 1; clearBalanceCache();
+  r = await user('POST', '/api/videos', { description: 'ساعة ذكية', image: PNG });
+  assert.equal(r.status, 503);
+  fake.balance = 100; clearBalanceCache();
+
+  // a key that may not read its balance: blocked until the admin confirms one
+  fake.billingStatus = 403; clearBalanceCache();
+  r = await user('POST', '/api/videos', { description: 'ساعة ذكية', image: PNG });
+  assert.equal(r.status, 503);
+  r = await admin('PUT', '/api/admin/engines', { providers: { fal: { confirmedBalanceUsd: 10 } } });
+  assert.equal(r.data.providers.find((p) => p.id === 'fal').balance.source, 'confirmed');
+  r = await user('POST', '/api/videos', { description: 'ساعة ذكية', image: PNG, style: 'SHOWCASE' });
+  assert.equal(r.status, 201);
+  const sc = await settle(r.data.id);
+  assert.equal(sc.status, 'COMPLETED', sc.error);
+  r = await admin('GET', '/api/admin/engines');
+  const falRow = r.data.providers.find((p) => p.id === 'fal');
+  assert.ok(falRow.balance.usd < 10 && falRow.balance.usd > 6, 'the confirmed budget goes down with each charge');
+  assert.ok(r.data.errors.some((e) => e.kind === 'REFUSED'), 'refusals are logged for the admin');
+  fake.billingStatus = 200; clearBalanceCache();
+
+  // the daily limit counts spend and money held by videos still rendering
+  await saveSettings({ perDayMaxUsd: 1 });
+  r = await user('POST', '/api/videos', { description: 'ساعة ذكية', image: PNG });
+  assert.equal(r.status, 503);
+  await saveSettings({ perDayMaxUsd: 50 });
+
+  // a model switched off is never picked
+  await saveSettings({ models: { 'fal:veo31-fast': { enabled: false }, 'fal:veo31-fast-ref': { enabled: false } } });
+  r = await admin('GET', '/api/admin/engines');
+  assert.ok(r.data.plans.UGC.error, 'no standard model left -> no plan, no fallback to premium');
+  r = await user('POST', '/api/videos', { description: 'ساعة ذكية', image: PNG });
+  assert.equal(r.status, 503);
+  await saveSettings({ models: { 'fal:veo31-fast': { enabled: true }, 'fal:veo31-fast-ref': { enabled: true } } });
+
+  // the free mock engine: no fal call at all, zero cost
+  await saveSettings({ providers: { mock: { enabled: true } } });
+  const before = fake.submitted.length;
+  r = await user('POST', '/api/videos', { description: 'كوباية حرارية', image: PNG, style: 'UGC' });
+  assert.equal(r.status, 201);
+  const m = await settle(r.data.id);
+  await saveSettings({ providers: { mock: { enabled: false } } });
+  assert.equal(m.status, 'COMPLETED', m.error);
+  assert.equal(m.provider, 'mock');
+  assert.equal(m.cost_actual_usd, 0);
+  assert.equal(fake.submitted.length, before, 'nothing paid was called');
+  r = await user('GET', `/api/videos/${m.id}/video`);
+  assert.equal(r.status, 200);
+  assert.ok(r.data.length > 1000, 'a real (tiny) mp4 to play in the browser');
+  assert.equal(await credits(), 7);
 });

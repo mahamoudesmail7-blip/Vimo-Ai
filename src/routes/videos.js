@@ -3,7 +3,7 @@ import { prisma } from '../db.js';
 import { AppError, asyncRoute } from '../errors.js';
 import { requireAuth } from '../auth.js';
 import rateLimit from 'express-rate-limit';
-import { createVideo, previewScript, remakeVideo, serialize } from '../services/videoJob.js';
+import { createVideo, previewScript, remakeVideo, serialize, quote } from '../services/videoJob.js';
 import { getBlob, sendBlob } from '../services/storage.js';
 
 const router = Router();
@@ -22,6 +22,9 @@ router.get('/', asyncRoute(async (req, res) => {
   const jobs = await prisma.videoJob.findMany({ where: { user_id: req.user.id }, orderBy: { created_at: 'desc' }, take: 100 });
   res.json({ videos: jobs.map((j) => serialize(j)) });
 }));
+
+// The price in credits before ordering, and whether videos can be made right now.
+router.get('/quote', asyncRoute(async (req, res) => res.json(await quote())));
 
 router.post('/', asyncRoute(async (req, res) => {
   res.status(201).json(await createVideo(req.user.id, req.body || {}));
