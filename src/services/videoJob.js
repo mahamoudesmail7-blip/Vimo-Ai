@@ -103,11 +103,11 @@ async function resolveStyle(userId, inputs) {
 /** Write the script for the customer to read and edit before paying a credit. */
 export async function previewScript(body, userId = null) {
   const inputs = await resolveStyle(userId, readInputs(body));
-  const [image] = readImages(body);
+  const images = readImages(body);
   const settings = await loadSettings();
   const { plan } = planVideo({ style: inputs.style, pace: inputs.options.pace, settings });
   const sceneSeconds = plan?.sceneSeconds || Array(env.defaultClipCount()).fill(env.clipSeconds());
-  const script = await writeScript({ ...inputs, clipCount: sceneSeconds.length, sceneSeconds, pace: inputs.options.pace, goal: inputs.options.goal, mode: plan?.mode, imageDataUrl: image.dataUrl });
+  const script = await writeScript({ ...inputs, clipCount: sceneSeconds.length, sceneSeconds, pace: inputs.options.pace, goal: inputs.options.goal, mode: plan?.mode, imageDataUrl: images.map((i) => i.dataUrl) });
   return { ...script, maxWords: wordsFor(Math.max(...sceneSeconds), inputs.options.pace), sceneSeconds, clipSeconds: sceneSeconds[0] };
 }
 
@@ -316,7 +316,7 @@ async function startJob(job) {
   if (!script) {
     script = await writeScript({
       productName: job.product_name, description: job.description, offer: job.offer, style: job.style,
-      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, goal: options.goal, mode: plan.mode, imageDataUrl: images[0],
+      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, goal: options.goal, mode: plan.mode, imageDataUrl: images, // every photo: colors and variants show up in the script
     });
     const scriptLine = plan.estimate.lines.find((l) => l.step === 'script');
     if (script.source === 'AI' && scriptLine) {

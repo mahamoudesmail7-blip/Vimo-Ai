@@ -151,17 +151,19 @@ function scriptRequest({ productName, description, offer, style, goal, voiceGend
     GOAL_DIRECTION[goal] || GOAL_DIRECTION.SALES,
     voiceover ? `Voice: ${speaker} reads the lines as a voiceover over the footage; nobody talks on camera, people only react naturally.` : `Speaker: ${speaker}.`,
     '',
-    'STEP 1. Study the attached product photo closely before writing anything:',
-    '- what the product really is and what problem it solves;',
+    'STEP 1. Study ALL the attached product photos closely before writing anything:',
+    '- what the product really is, who buys it, and the everyday moments it makes better (e.g. for shoes: work, outings, long walks; for a kitchen tool: cooking for the family);',
+    '- the variants the photos show: if they show the same product in several colors or models, the ad says how many and names the colors in simple Egyptian words (e.g. "متوفرة بتلات ألوان: رمادي وأسود وكحلي");',
     '- exactly how it is physically held and used (which hand, which part touches the body or the object, its size compared to a hand);',
     '- its exact look: shape, proportions, colors, materials, every visible part, logo and label text.',
     '',
     `STEP 2. Write a ${clipCount}-scene ad. Each scene is ONE clip; the scene lengths in seconds are: ${secs.join(', ')}.`,
-    '- Scene 1 is the hook: in the first 2 seconds hit a real pain, fear or desire of the buyer, or say something surprising. It must make an Egyptian stop scrolling. A direct question to the viewer works best (e.g. "مين قالك إنك لازم...؟", "البرد موقف شغلك؟").',
+    '- Scene 1 is the hook: in the first 2 seconds hit a real pain, fear or desire of the buyer, or say something surprising. It must make an Egyptian stop scrolling. A short direct question about an everyday situation works best (e.g. "رجلك بتوجعك من الجزمة كل ما تنزل؟", "البرد موقف شغلك؟"). Think of three hooks and keep the strongest. The hook never uses made-up numbers or times ("بعد ساعتين", "في 5 دقايق") unless the seller gave them.',
     '- It is ONE person in ONE place for the whole ad, talking straight to the camera like a real review, holding the product near their face or using it. Every scene\'s "visual" keeps the same person, outfit and place; only the framing changes (medium shot, close-up on the product in hand).',
     '- The lines flow as one continuous talk across the scenes, like the person never stopped talking.',
-    '- Middle scene(s): show the product being used correctly and give ONE concrete benefit with a feeling or a quick proof (a before/after moment, a reaction).',
-    '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt).',
+    '- Middle scene(s): show the product being used correctly and give one or two concrete benefits the buyer feels in daily life (comfort, saving time, looking good), plus the colors/variants if there are several.',
+    '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt). Say the price like "دلوقتي بـ خمسمية جنيه بس بدل تمانمية", never "بخصم خمسمية".',
+    '- Never use the same word twice close together (e.g. "دلوقتي" twice in the last scene).',
     '',
     voiceover ? 'Rules for "voiceover" (the narration for that scene):' : 'Rules for "voiceover" (the line the speaker says on camera):',
     pace !== 'fast'
@@ -196,7 +198,7 @@ function parseJsonObject(text) {
 
 async function askOpenAi(key, user, imageDataUrl, system = SYSTEM) {
   const content = [{ type: 'text', text: user }];
-  if (imageDataUrl) content.push({ type: 'image_url', image_url: { url: imageDataUrl } });
+  for (const url of [].concat(imageDataUrl || [])) content.push({ type: 'image_url', image_url: { url } });
   const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -216,7 +218,7 @@ async function askFal(user, imageDataUrl, system = SYSTEM, temperature = 0.8) {
     model: env.scriptModel(),
     system_prompt: system,
     prompt: user,
-    image_urls: imageDataUrl ? [imageDataUrl] : [],
+    image_urls: [].concat(imageDataUrl || []),
     temperature,
     max_tokens: 2500,
   });
@@ -226,6 +228,7 @@ async function askFal(user, imageDataUrl, system = SYSTEM, temperature = 0.8) {
 const PROOFREAD = [
   'You proofread Egyptian Arabic (عامية مصرية) lines that a voice will speak in a video ad.',
   'Fix every line so that: it is correct, natural Egyptian as people really say it; every sentence is complete and makes sense; it uses only common everyday words that are easy to pronounce (replace rare, formal or hard words with simple ones); it sounds like a real person, not an ad and not an AI.',
+  'Pick the word an Egyptian really uses (e.g. "نعلها طري" not "نعلها ناعم", "جزمة" or "كوتشي" not "حذاء"). Never repeat the same word twice close together. A price reads like "بـ خمسمية جنيه بس بدل تمانمية", never "بخصم خمسمية". Remove any made-up number or time that is not in the seller\'s description.',
   'Keep the meaning, the order and the facts. Never add a feature, number, brand, guarantee or price that is not already in the line. Prices and numbers stay written as Egyptian words.',
   'Keep each line at or under its word limit.',
   'Then, for the voice only, write each corrected line again in "spoken" with Arabic diacritics (تشكيل) on the words a voice could read wrong (e.g. "شَنطِتك", "هيِوَفّر"); leave every other word and all letters exactly the same.',
@@ -270,7 +273,7 @@ export async function writeScript({ productName, description, offer, style, goal
     const reply = openAiKey ? await askOpenAi(openAiKey, user, imageDataUrl) : await askFal(user, imageDataUrl);
     const parsed = normalize(parseJsonObject(reply), clipCount, limits);
     if (parsed) {
-      parsed.scenes = await proofread(parsed.scenes, limits, offer, imageDataUrl);
+      parsed.scenes = await proofread(parsed.scenes, limits, offer, [].concat(imageDataUrl || [])[0]);
       return { ...parsed, hook: parsed.scenes[0].voiceover, cta: parsed.scenes.at(-1).voiceover };
     }
     throw new Error('script JSON missing scenes');

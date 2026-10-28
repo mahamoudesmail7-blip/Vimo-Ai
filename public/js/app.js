@@ -105,7 +105,7 @@ async function renderCreate(view) {
         <input type="file" id="file" accept="image/png,image/jpeg,image/webp" multiple hidden />
         <div class="hint">صورة واضحة للمنتج. تقدر تضيف لحد ${fmt(MAX_PHOTOS)} صور من زوايا مختلفة.</div>`)}
       ${step(2, 'قولنا عن المنتج', `<textarea id="description" maxlength="1500" rows="2" placeholder="مثلًا: كوتشي رجالي خامة ممتازة ومريح جدًا"></textarea>
-        <div class="hint">سطر واحد كفاية. إحنا بنشوف الصورة ونفهم الباقي.</div>
+        <div class="hint">سطر واحد كفاية، ولو في ميزة مهمة (الخامة، المقاسات، الضمان) اكتبها. الألوان بنشوفها من الصور.</div>
         <label class="label sub-label" for="offer">السعر <span class="muted" style="font-weight:400">(اختياري)</span></label>
         <input id="offer" type="text" maxlength="200" placeholder="مثلًا: 350 جنيه بدل 700" />
         <div class="hint">اكتبه بالأرقام عادي، وإحنا بنخلّيه يتقال صح.</div>`)}
