@@ -33,6 +33,22 @@ function trimWords(s, max) {
   return words.length <= max ? words.join(' ') : words.slice(0, max).join(' ');
 }
 
+// A spoken line that is too long is cut at the last clause end that fits, so
+// it never stops mid-sentence ("تاخديه معاكي في").
+const DANGLING = new Set(['في', 'من', 'على', 'عن', 'و', 'أو', 'ب', 'ل', 'مع', 'لحد', 'اللي', 'بس', 'عشان', 'لما']);
+function fitLine(s, max) {
+  const words = String(s || '').trim().split(/\s+/).filter(Boolean);
+  if (words.length <= max) return words.join(' ');
+  const cut = words.slice(0, max);
+  for (let k = cut.length; k >= Math.ceil(max * 0.6); k--) {
+    if (/[،,.!؟?]$/.test(cut[k - 1])) return cut.slice(0, k).join(' ').replace(/[،,]$/, '.');
+  }
+  while (cut.length > 1 && DANGLING.has(cut[cut.length - 1])) cut.pop();
+  return cut.join(' ');
+}
+
+export { fitLine };
+
 export function templateScript({ productName, description, offer, clipCount, sceneSeconds, pace }) {
   const clean = (t) => String(t || '').replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim();
   const name = clean(productName);
@@ -45,7 +61,7 @@ export function templateScript({ productName, description, offer, clipCount, sce
   ];
   const scenes = clipCount === 1 ? [lines[0]] : clipCount === 2 ? [lines[0], lines[2]] : lines.slice(0, 2).concat(Array(Math.max(0, clipCount - 3)).fill(lines[1]), [lines[2]]);
   const limits = limitsOf(clipCount, sceneSeconds, pace);
-  const fitted = scenes.map((sc, i) => ({ ...sc, voiceover: trimWords(sc.voiceover, limits[i]) }));
+  const fitted = scenes.map((sc, i) => ({ ...sc, voiceover: fitLine(sc.voiceover, limits[i]) }));
   return { hook: fitted[0].voiceover, cta: fitted[fitted.length - 1].voiceover, scenes: fitted, source: 'TEMPLATE' };
 }
 
@@ -56,7 +72,7 @@ function normalize(data, clipCount, limits) {
     camera: String(s.camera || '').slice(0, 160),
     visual: String(s.visual || '').slice(0, 900),
     motion: String(s.motion || '').slice(0, 500),
-    voiceover: trimWords(s.voiceover, limits[i]),
+    voiceover: fitLine(s.voiceover, limits[i]),
   }));
   if (out.some((s) => !s.visual || !s.voiceover)) return null;
   return {

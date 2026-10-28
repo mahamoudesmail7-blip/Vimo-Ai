@@ -178,3 +178,11 @@ test('numbers are spoken as Egyptian words (prices, percents), decimals kept', a
   assert.equal(speakNumbers('3500'), 'تلات تلاف وخمسمية');
   assert.equal(speakNumbers('2.5 كيلو'), '2.5 كيلو');
 });
+
+test('a too-long spoken line is cut at a clause end, never mid-sentence', async () => {
+  const { fitLine } = await import('../src/services/script.js');
+  const line = 'شوفي إزاي بيشيل الشعر الخفيف من الشفة والدقن والخدود بكل سهولة، ومش بيأذي بشرتك خالص، حجمه صغير تاخديه معاكي في الشنطة';
+  assert.equal(fitLine(line, 20), 'شوفي إزاي بيشيل الشعر الخفيف من الشفة والدقن والخدود بكل سهولة، ومش بيأذي بشرتك خالص.');
+  assert.equal(fitLine('واحد اتنين تلاتة أربعة خمسة ستة في', 7), 'واحد اتنين تلاتة أربعة خمسة ستة في');
+  assert.equal(fitLine('واحد اتنين تلاتة أربعة خمسة ستة في سبعة', 7), 'واحد اتنين تلاتة أربعة خمسة ستة');
+});
