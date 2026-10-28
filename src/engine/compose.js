@@ -1,7 +1,7 @@
 // Hybrid production, done on our own server for free: one AI clip, then the
 // product's real photos with a slow camera move (blurred background, product
 // centred), joined and laid under the voiceover. Only the AI clip and the
-// voice are paid, which is what brings a 24s ad down to ~$0.3-0.45.
+// voice are paid, which is what brings a 20s ad down to ~$0.21.
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
