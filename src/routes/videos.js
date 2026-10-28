@@ -35,7 +35,7 @@ const previewLimit = rateLimit({
   windowMs: 60 * 60 * 1000, limit: 30, keyGenerator: (req) => `u${req.user.id}`, standardHeaders: true, legacyHeaders: false,
   message: { error: 'RATE_LIMIT', message: 'جربت سكريبتات كتير، استنى شوية وجرب تاني.' },
 });
-router.post('/script-preview', previewLimit, asyncRoute(async (req, res) => res.json(await previewScript(req.body || {}))));
+router.post('/script-preview', previewLimit, asyncRoute(async (req, res) => res.json(await previewScript(req.body || {}, req.user.id))));
 
 router.post('/:id/remake', asyncRoute(async (req, res) => {
   res.status(201).json(await remakeVideo(req.user.id, idOf(req.params.id), { sameScript: req.body?.sameScript !== false }));

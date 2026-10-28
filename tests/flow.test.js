@@ -18,6 +18,13 @@ let server, base, prisma, fal, processDueJobs;
 const fake = { submitted: [], polls: {}, failClips: false, mergeInputs: [], balance: 100, billingStatus: 200 };
 async function fakeFetch(url, opts = {}) {
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  if (url === 'https://fal.run/fal-ai/whisper' && fake.hear) {
+    // speech-to-text: "hears" the line the clip was asked to say, garbled when fake.hear says so
+    const id = /(req\d+)\.mp4$/.exec(JSON.parse(opts.body).audio_url)?.[1];
+    const said = /says [^"]*"([^"]+)"/.exec(fake.submitted.find((x) => x.id === id)?.body.prompt || '')?.[1] || '';
+    fake.heard.push(id);
+    return json(200, { text: fake.hear(fake.heard.length, said) });
+  }
   if (url.startsWith('https://fal.run/')) return json(500, { detail: 'no LLM in tests' }); // script falls back to the template
   if (url.startsWith('https://api.fal.ai/v1/account/billing')) return fake.billingStatus === 200 ? json(200, { credits: { current_balance: fake.balance } }) : json(fake.billingStatus, { detail: 'missing scope' });
   if (opts.method === 'POST' && url.startsWith('https://queue.fal.run/')) {
@@ -82,6 +89,9 @@ before(async () => {
   // The real-provider path: the free mock engine is off, fal is the engine.
   await (await import('../src/engine/settings.js')).saveSettings({ tier: 'standard', perVideoMaxUsd: 5, perDayMaxUsd: 50, hybrid: false, providers: { mock: { enabled: false } } });
 });
+// Marks a customer as having one finished video already.
+const madeOne = (userId) => prisma.videoJob.create({ data: { user_id: userId, product_name: 'قديم', image_key: 'x', status: 'COMPLETED', finished_at: new Date() } });
+
 after(async () => { server?.close(); await prisma?.$disconnect(); });
 
 test('full flow: top-up, approve, render, download, refund on failure', { skip }, async () => {
@@ -244,6 +254,12 @@ test('engine: voiceover mode, idempotent orders, spending limits, balance gate, 
   await admin('POST', `/api/admin/users/${uid}/credits`, { delta: 10 });
   const credits = async () => (await user('GET', '/api/auth/me')).data.user.credits;
 
+  // a customer's first «تلقائي» video is made in the studio look (talking on camera)
+  r = await user('POST', '/api/videos/script-preview', { description: 'سماعة بلوتوث', image: PNG });
+  assert.equal(r.status, 200);
+  assert.match(r.data.scenes.map((x) => x.voiceover).join(' '), /\S/);
+  await madeOne(uid);
+
   r = await user('GET', '/api/admin/engines');
   assert.equal(r.status, 403);
   r = await admin('GET', '/api/admin/engines');
@@ -350,6 +366,7 @@ test('hybrid: one AI clip + the real product photos under the voiceover, ~$0.21 
     const admin = client();
     await admin('POST', '/api/auth/login', { email: 'boss@test.dev', password: 'secret123' });
     let r = await user('POST', '/api/auth/signup', { name: 'Salma', email: 'salma@test.dev', password: 'secret123' });
+    await madeOne(r.data.user.id); // not her first video: «تلقائي» takes the cheapest way
     await admin('POST', `/api/admin/users/${r.data.user.id}/credits`, { delta: 1 });
     r = await admin('GET', '/api/admin/engines');
     assert.equal(r.data.plans.AUTO.mode, 'hybrid');
@@ -374,5 +391,36 @@ test('hybrid: one AI clip + the real product photos under the voiceover, ~$0.21 
   } finally {
     fake.realMedia = false;
     await saveSettings({ tier: 'standard', perVideoMaxUsd: 5, hybrid: false });
+  }
+});
+
+test('speech check: a garbled talking clip is made again once, same first frame', { skip }, async () => {
+  const { saveSettings } = await import('../src/engine/settings.js');
+  await saveSettings({ tier: 'economy', perVideoMaxUsd: 3, hybrid: true });
+  fake.heard = [];
+  fake.hear = (n, said) => (n === 2 ? 'حق مصغير تغذيف شانتتك' : said); // the 2nd clip heard is garbled
+  try {
+    const user = client();
+    const admin = client();
+    await admin('POST', '/api/auth/login', { email: 'boss@test.dev', password: 'secret123' });
+    let r = await user('POST', '/api/auth/signup', { name: 'Hoda', email: 'hoda@test.dev', password: 'secret123' });
+    await admin('POST', `/api/admin/users/${r.data.user.id}/credits`, { delta: 1 });
+    const start = fake.submitted.length;
+    r = await user('POST', '/api/videos', { description: 'جهاز إزالة شعر', image: PNG, style: 'STUDIO' });
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    const job = await settle(r.data.id, 30);
+    assert.equal(job.status, 'COMPLETED', job.error);
+    const clips = fake.submitted.slice(start).filter((x) => /veo/.test(x.model));
+    assert.equal(clips.length, 4, '3 scenes + one re-take');
+    assert.equal(fake.heard.length, 4, 'every take was listened to');
+    assert.equal(clips[3].body.image_url, clips[1].body.image_url, 'the re-take starts from the same first frame');
+    assert.match(clips[3].body.prompt, /slowly and clearly/);
+    const saved = JSON.parse(job.clips_json);
+    assert.equal(saved[1].takes.length, 2);
+    assert.equal(saved[1].url, `https://cdn.fake/${clips[3].id}.mp4`, 'the better take is kept');
+    const events = await prisma.engineEvent.findMany({ where: { job_id: job.id, kind: 'ERROR' } });
+    assert.ok(events.some((e) => /بنعيده/.test(e.message)), 'the admin sees why');
+  } finally {
+    fake.hear = null;
   }
 });

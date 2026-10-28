@@ -197,6 +197,7 @@ async function renderEngines(view, data = null) {
         <div class="field" style="margin:0"><label>أقصى صرف في اليوم ($)</label>${num('id="perDay"', e.settings.perDayMaxUsd)}</div>
         <div class="field" style="margin:0"><label>مدة الفيديو</label><select id="targetSeconds" style="width:130px">${[16, 20, 24].map((v) => `<option value="${v}" ${(e.settings.targetSeconds || 24) === v ? 'selected' : ''}>${v} ثانية</option>`).join('')}</select></div>
         <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="captions" ${e.settings.captions !== false ? 'checked' : ''} /> الكلام مكتوب على الشاشة</label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="speechCheck" ${e.settings.speechCheck !== false ? 'checked' : ''} /> فحص الكلام تلقائيًا وإعادة المشهد الغلط مرة (~$0.30 لما يحصل)</label>
         <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="hybrid" ${e.settings.hybrid !== false ? 'checked' : ''} /> الفيديو المختلط (الأرخص)</label>
         <div class="stat" style="padding:10px 14px"><div class="k">اتصرف النهارده</div><div class="v" style="font-size:20px" dir="ltr">${usd(e.spentTodayUsd)}</div></div>
       </div>
@@ -249,7 +250,7 @@ async function renderEngines(view, data = null) {
 
   const n = (el) => (el && el.value !== '' ? Number(el.value) : undefined);
   $('#saveEngines').onclick = async () => {
-    const patch = { tier: $('#tier').value, hybrid: $('#hybrid').checked, captions: $('#captions').checked, targetSeconds: Number($('#targetSeconds').value), perVideoMaxUsd: n($('#perVideo')), perDayMaxUsd: n($('#perDay')), providers: {}, models: {} };
+    const patch = { tier: $('#tier').value, hybrid: $('#hybrid').checked, captions: $('#captions').checked, speechCheck: $('#speechCheck').checked, targetSeconds: Number($('#targetSeconds').value), perVideoMaxUsd: n($('#perVideo')), perDayMaxUsd: n($('#perDay')), providers: {}, models: {} };
     for (const p of providers) {
       const c = $(`[data-p-confirm="${p.id}"]`);
       patch.providers[p.id] = {
