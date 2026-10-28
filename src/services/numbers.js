@@ -1,10 +1,11 @@
 // Prices and numbers are written out in Egyptian words before a line is
-// spoken ("299" -> "ميتين تسعة وتسعين"), so the voice never reads digits
+// spoken ("350" -> "تلاتمية وخمسين"), so the voice never reads digits
 // wrong. Captions and the offer badge keep showing the digits.
 const ONES = ['', 'واحد', 'اتنين', 'تلاتة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'تمانية', 'تسعة', 'عشرة',
   'حداشر', 'اتناشر', 'تلاتاشر', 'أربعتاشر', 'خمستاشر', 'ستاشر', 'سبعتاشر', 'تمنتاشر', 'تسعتاشر'];
 const TENS = ['', '', 'عشرين', 'تلاتين', 'أربعين', 'خمسين', 'ستين', 'سبعين', 'تمانين', 'تسعين'];
-const HUNDREDS = ['', 'مية', 'ميتين', 'تلتمية', 'ربعمية', 'خمسمية', 'ستمية', 'سبعمية', 'تمنمية', 'تسعمية'];
+// spelled the way they are said, so the voice reads them right ("تلاتمية", not "تلتمية")
+const HUNDREDS = ['', 'مية', 'ميتين', 'تلاتمية', 'ربعمية', 'خمسمية', 'ستمية', 'سبعمية', 'تمانمية', 'تسعمية'];
 const FEW_THOUSANDS = ['', 'ألف', 'ألفين', 'تلات تلاف', 'أربع تلاف', 'خمس تلاف', 'ست تلاف', 'سبع تلاف', 'تمن تلاف', 'تسع تلاف', 'عشر تلاف'];
 
 function below1000(n) {
@@ -32,6 +33,7 @@ const toLatin = (s) => s.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩
 /** Replaces whole numbers (and "%") in a line with how an Egyptian says them. */
 export function speakNumbers(text) {
   return toLatin(String(text || ''))
+    .replace(/(^|[\s(])ب(?:ـ)?\s*(?=[\d٠-٩])/g, '$1بـ ') // "ب350" / "بـ350" -> "بـ 350": the number stays a word of its own
     .replace(/(\d{1,3}(?:,\d{3})+|\d+)(\s*%)?/g, (m, num, pct, offset, all) => {
       if (/[.\d]/.test(all[offset + m.length] || '') || /[.]/.test(all[offset - 1] || '')) return m; // decimals stay as is
       const n = Number(num.replace(/,/g, ''));

@@ -179,7 +179,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   const prompts = fake.submitted.slice(before).filter((x) => x.body.image_url).map((x) => x.body.prompt);
   const { speakNumbers } = await import('../src/services/numbers.js');
   assert.ok(edited.every((e, i) => prompts[i].includes(speakNumbers(e.voiceover))), 'each clip speaks the edited line');
-  assert.ok(prompts[2].includes('تلتمية جنيه'), 'the price is spoken as words');
+  assert.ok(prompts[2].includes('تلاتمية جنيه'), 'the price is spoken as words');
   assert.equal(JSON.parse(mine.script_json).source, 'USER_EDITED');
 
   // remake: same photo and script, a new charged render; not someone else's video

@@ -176,6 +176,7 @@ test('numbers are spoken as Egyptian words (prices, percents), decimals kept', a
   assert.equal(speakNumbers('خصم 50%'), 'خصم خمسين في المية');
   assert.equal(speakNumbers('بـ 1,500 جنيه و ١٢٠٠'), 'بـ ألف وخمسمية جنيه و ألف وميتين');
   assert.equal(speakNumbers('3500'), 'تلات تلاف وخمسمية');
+  assert.equal(speakNumbers('اطلبيه ب350 جنيه بدل 700'), 'اطلبيه بـ تلاتمية وخمسين جنيه بدل سبعمية');
   assert.equal(speakNumbers('2.5 كيلو'), '2.5 كيلو');
 });
 

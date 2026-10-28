@@ -159,7 +159,7 @@ function scriptRequest({ productName, description, offer, style, voiceGender, cl
     '- Specific to THIS product (use what you saw in the photo), no generic filler, do not repeat the product name in every line.',
     '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
     '- Facts must be TRUE: only say features, numbers, brand names, materials or specs that are in the seller\'s description or clearly visible in the photo. Never invent power, sizes, guarantees, prices or delivery times. If unsure, describe the benefit in general words instead.',
-    '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud. Write prices and numbers as Egyptian words ("ميتين وتسعة وتسعين جنيه"), never digits.',
+    '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud. Write prices and numbers as Egyptian words spelled as they are said, with "بـ" as its own word ("بـ تلاتمية وخمسين جنيه"), never digits.',
     '',
     'Rules for "visual" (the first frame, in English, max 90 words). It becomes a real photo made from the product photo, so:',
     '- describe ONE photorealistic smartphone-camera frame: a real Egyptian setting, the speaker, framing, light;',
