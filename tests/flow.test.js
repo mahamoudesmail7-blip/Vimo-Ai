@@ -120,6 +120,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   assert.equal(ok.status, 'COMPLETED', ok.error);
   const frameSubs = fake.submitted.filter((s) => s.model.includes('nano-banana'));
   assert.equal(frameSubs.length, 3, 'a first frame per scene');
+  assert.ok(frameSubs.slice(1).every((s) => s.body.image_urls.length === frameSubs[0].body.image_urls.length + 1 && s.body.prompt.includes('LAST reference image')), 'scenes 2+ keep the person and place of scene 1');
   assert.ok(frameSubs.every((s) => s.model === 'fal-ai/nano-banana-pro/edit' && s.body.image_urls[0].startsWith('data:image/png') && s.body.aspect_ratio === '9:16'));
   const clipSubs = fake.submitted.filter((s) => s.body.image_url);
   assert.equal(clipSubs.length, 3, 'three clips');
@@ -148,7 +149,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   fake.failClips = false;
   assert.equal(bad.status, 'FAILED');
   assert.match(bad.error, /content policy/);
-  assert.ok(JSON.parse(bad.clips_json).every((c) => c.frame.status === 'SKIPPED'), 'a failed first frame does not fail the video by itself');
+  assert.equal(JSON.parse(bad.clips_json)[0].frame.status, 'SKIPPED', 'a failed first frame does not fail the video by itself');
   assert.ok(bad.refunded);
   r = await user('GET', '/api/auth/me');
   assert.equal(r.data.user.credits, 2, '3 - 1 used - 1 spent then refunded');
@@ -268,7 +269,7 @@ test('engine: voiceover mode, idempotent orders, spending limits, balance gate, 
   const clips = subs.filter((x) => x.model === 'fal-ai/veo3.1/fast/image-to-video');
   assert.equal(clips.length, 3);
   assert.ok(clips.every((x) => x.body.generate_audio === false && /Nobody speaks/.test(x.body.prompt)));
-  assert.ok(subs.filter((x) => x.model.includes('nano-banana')).every((x) => x.body.image_urls.length === 2), 'every photo is a reference for the first frame');
+  assert.deepEqual(subs.filter((x) => x.model.includes('nano-banana')).map((x) => x.body.image_urls.length), [2, 3, 3], 'every photo is a reference for the first frame, plus scene 1 for the others');
   const tts = subs.find((x) => x.model === 'fal-ai/elevenlabs/tts/eleven-v3');
   assert.ok(tts && tts.body.language_code === 'ar' && tts.body.text.length > 20);
   const mux = subs.find((x) => x.model === 'fal-ai/ffmpeg-api/merge-audio-video');

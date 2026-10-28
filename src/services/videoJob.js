@@ -354,6 +354,8 @@ async function settle(job, step, label) {
   }
 }
 
+const CONTINUITY = 'The LAST reference image is the first frame of this same video: keep the very same person (face, hair, age, outfit) and the very same place and lighting, only the shot changes. The other reference images show the product.';
+
 async function submitClip(job, plan, clip, images) {
   const refs = [clip.frame?.url, ...images].filter(Boolean);
   await submitStep(job, clip, plan.models.video, 'video', {
@@ -364,10 +366,16 @@ async function submitClip(job, plan, clip, images) {
 
 // The first frame of a scene. If the image model fails twice, the clip starts
 // from the plain product photo instead of failing the whole video.
-async function advanceFrame(job, plan, clip, images) {
+// Scenes after the first wait for scene 1's frame and use it as a reference,
+// so the whole ad keeps one person, one outfit and one place.
+async function advanceFrame(job, plan, clip, images, clips = []) {
   const frame = clip.frame;
   if (frame.status === 'PENDING' || frame.status === 'RETRY') {
-    await submitStep(job, frame, plan.models.image, 'image', { prompt: frame.prompt, imageUrls: images, aspectRatio: job.aspect_ratio });
+    const first = clip.index > 0 ? clips.find((c) => c.index === 0)?.frame : null;
+    if (first && !['COMPLETED', 'SKIPPED', 'FAILED'].includes(first.status)) return;
+    const anchor = first?.status === 'COMPLETED' && first.url ? first.url : null;
+    const prompt = anchor ? `${frame.prompt} ${CONTINUITY}` : frame.prompt;
+    await submitStep(job, frame, plan.models.image, 'image', { prompt, imageUrls: anchor ? [...images, anchor] : images, aspectRatio: job.aspect_ratio });
     return;
   }
   const st = await settle(job, frame, `أول فريم للمشهد ${clip.index + 1}`);
@@ -391,7 +399,7 @@ async function pollClips(job, images = null) {
       legacyStep(clip.frame, plan.models.image);
       if (clip.status === 'COMPLETED') continue;
       if (clip.status === 'WAITING_FRAME') {
-        await advanceFrame(job, plan, clip, await loadImages());
+        await advanceFrame(job, plan, clip, await loadImages(), clips);
         if (clip.status !== 'PENDING') continue;
       }
       if (clip.status === 'PENDING' || clip.status === 'RETRY') {
