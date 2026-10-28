@@ -9,6 +9,7 @@
 // fails a template script is used, so a video can always be made.
 import { env } from '../config.js';
 import * as fal from './fal.js';
+import { speakNumbers } from './numbers.js';
 
 const STYLE_DIRECTION = {
   AUTO: 'High-converting Egyptian social ad: a real Egyptian person using the product in a real home, mixed with sharp close-ups of the product details, natural light, filmed on a smartphone.',
@@ -142,7 +143,7 @@ function scriptRequest({ productName, description, offer, style, voiceGender, cl
     '- Specific to THIS product (use what you saw in the photo), no generic filler, do not repeat the product name in every line.',
     '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
     '- Facts must be TRUE: only say features, numbers, brand names, materials or specs that are in the seller\'s description or clearly visible in the photo. Never invent power, sizes, guarantees, prices or delivery times. If unsure, describe the benefit in general words instead.',
-    '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud.',
+    '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud. Write prices and numbers as Egyptian words ("ميتين وتسعة وتسعين جنيه"), never digits.',
     '',
     'Rules for "visual" (the first frame, in English, max 90 words). It becomes a real photo made from the product photo, so:',
     '- describe ONE photorealistic smartphone-camera frame: a real Egyptian setting, the speaker, framing, light;',
@@ -242,7 +243,7 @@ export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, w
     scene.motion || scene.visual,
     mode === 'voiceover'
       ? 'Nobody speaks in this clip: no dialogue and no lip movement; people only react naturally. Silent footage.'
-      : `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says ${speech}: "${scene.voiceover}"`,
+      : `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says ${speech}: "${speakNumbers(scene.voiceover)}"`,
     mode === 'speech' ? (music === 'light' ? 'Light upbeat background music, quiet under the voice.' : 'No background music, only the voice and natural room sound.') : '',
     'The product must look exactly like the reference image for the whole clip: same shape, colors, logo, label and packaging. It does not morph, bend, melt or change; do not add or remove any part of the product.',
     product?.usage ? `It is used like this: ${product.usage}` : '',

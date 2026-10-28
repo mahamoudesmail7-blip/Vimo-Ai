@@ -169,3 +169,12 @@ test('captions: two short lines per cue inside each scene, offer badge on the la
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 5);
   assert.deepEqual(c.punches, [[4, 8], [11, 14]], 'a punch-in halfway through each talking scene');
 });
+
+test('numbers are spoken as Egyptian words (prices, percents), decimals kept', async () => {
+  const { speakNumbers } = await import('../src/services/numbers.js');
+  assert.equal(speakNumbers('بـ 299 جنيه بدل 450'), 'بـ ميتين وتسعة وتسعين جنيه بدل ربعمية وخمسين');
+  assert.equal(speakNumbers('خصم 50%'), 'خصم خمسين في المية');
+  assert.equal(speakNumbers('بـ 1,500 جنيه و ١٢٠٠'), 'بـ ألف وخمسمية جنيه و ألف وميتين');
+  assert.equal(speakNumbers('3500'), 'تلات تلاف وخمسمية');
+  assert.equal(speakNumbers('2.5 كيلو'), '2.5 كيلو');
+});

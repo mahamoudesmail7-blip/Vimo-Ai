@@ -26,6 +26,7 @@ import { EngineError, isTransient } from '../engine/errors.js';
 import { toBuffer } from '../engine/media.js';
 import { composeHybrid, ffmpegPath } from '../engine/compose.js';
 import { captionCues, toAss, burnCaptions } from '../engine/captions.js';
+import { speakNumbers } from './numbers.js';
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
 const MAX_CLIP_ATTEMPTS = 2;
@@ -328,7 +329,7 @@ async function startJob(job) {
     attempts: 0,
   }));
   const audio = plan.mode !== 'speech'
-    ? { tts: { key: 'tts', text: script.scenes.map((s) => s.voiceover).join(' ... '), status: 'PENDING', attempts: 0 } }
+    ? { tts: { key: 'tts', text: speakNumbers(script.scenes.map((s) => s.voiceover).join(' ... ')), status: 'PENDING', attempts: 0 } }
     : null;
   job = await save(job, { script_json: JSON.stringify(script), clips_json: JSON.stringify(clips), audio_json: audio ? JSON.stringify(audio) : null, status: 'GENERATING', progress: 10 });
   return pollClips(job, images);
