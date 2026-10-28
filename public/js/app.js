@@ -5,7 +5,7 @@ import { api, esc, $, $$, fmt, fmtDate, toast, shrinkImage, STATUS } from '/js/c
 const MAX_PHOTOS = 4;
 const newRef = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, '');
 const blankForm = (keep = {}) => ({
-  images: [], description: '', style: 'AUTO', aspectRatio: '9:16', voiceGender: 'MALE', pace: 'fast', music: 'none', offer: '', script: null,
+  images: [], description: '', style: 'AUTO', goal: 'SALES', aspectRatio: '9:16', voiceGender: 'MALE', music: 'none', offer: '', script: null,
   ...keep, clientRef: newRef(),
 });
 const state = { me: null, cfg: null, quote: null, poll: null, form: blankForm() };
@@ -52,6 +52,13 @@ const STYLE_OPTS = [
   ['STUDIO', 'استوديو', 'شخص قاعد في استوديو شيك بحيطة غامقة وإضاءة دافية، ماسك منتجك وبيكلم الكاميرا.', ['شكل احترافي زي إعلانات البراندات', 'كلام مكتوب أبيض وأصفر', 'السعر في بادج أصفر في الآخر']],
   ['SHOWCASE', 'عرض المنتج', 'لقطات قريبة لمنتجك بحركة كاميرا ناعمة وصوت بيشرح، من غير شخص.', ['المنتج هو البطل', 'مناسب للإكسسوارات والأجهزة']],
 ];
+const GOAL_OPTS = [
+  ['SALES', 'بيعي ومباشر', 'الميزة والسعر واطلب دلوقتي'],
+  ['EMOTIONAL', 'عاطفي', 'إحساس وموقف من الحياة'],
+  ['REVIEW', 'تجربة شخصية', 'زي واحد بيحكي لصاحبه'],
+];
+const step = (n, title, body, hint = '') => `<section class="step"><div class="step-head"><span class="step-n">${fmt(n)}</span><span class="label">${title}</span></div>${hint ? `<div class="hint step-hint">${hint}</div>` : ''}${body}</section>`;
+
 const styleCard = ([v, t, d, pts], f) => `
   <div class="style-opt ${f.style === v ? 'active' : ''}" data-style="${v}" role="radio" aria-checked="${f.style === v}" tabindex="0">
     <div class="style-text"><b>${t}</b><span>${d}</span><ul>${pts.map((x) => `<li>${x}</li>`).join('')}</ul></div>
@@ -94,29 +101,24 @@ async function renderCreate(view) {
     <p class="hero-sub">ارفع صورة، اكتب سطر عن المنتج، والباقي علينا.</p>
     ${q.available ? '' : '<div class="notice">إنشاء الفيديوهات متوقف مؤقتًا. جرّب تاني كمان شوية.</div>'}
     <form class="card" id="createForm" novalidate>
-      <div class="field">
-        <span class="label">صور المنتج</span>
-        <div class="photos" id="photos"></div>
+      ${step(1, 'صورة المنتج', `<div class="photos" id="photos"></div>
         <input type="file" id="file" accept="image/png,image/jpeg,image/webp" multiple hidden />
-        <div class="hint">صورة واضحة للمنتج. تقدر تضيف لحد ${fmt(MAX_PHOTOS)} صور من زوايا مختلفة عشان يطلع زي ما هو بالظبط.</div>
-      </div>
-      <div class="field">
-        <label class="label" for="description">وصف المنتج</label>
-        <textarea id="description" maxlength="1500" rows="3" placeholder="مثلًا: سماعة بلوتوث بعزل ضوضاء وبطارية 30 ساعة"></textarea>
-      </div>
-      <div class="field">
-        <span class="label">شكل الإعلان</span>
-        <div class="styles" role="radiogroup">${STYLE_OPTS.map((o) => styleCard(o, f)).join('')}</div>
-      </div>
+        <div class="hint">صورة واضحة للمنتج. تقدر تضيف لحد ${fmt(MAX_PHOTOS)} صور من زوايا مختلفة.</div>`)}
+      ${step(2, 'قولنا عن المنتج', `<textarea id="description" maxlength="1500" rows="2" placeholder="مثلًا: كوتشي رجالي خامة ممتازة ومريح جدًا"></textarea>
+        <div class="hint">سطر واحد كفاية. إحنا بنشوف الصورة ونفهم الباقي.</div>
+        <label class="label sub-label" for="offer">السعر <span class="muted" style="font-weight:400">(اختياري)</span></label>
+        <input id="offer" type="text" maxlength="200" placeholder="مثلًا: 350 جنيه بدل 700" />
+        <div class="hint">اكتبه بالأرقام عادي، وإحنا بنخلّيه يتقال صح.</div>`)}
+      ${step(3, 'شكل الإعلان', `<div class="styles" role="radiogroup">${STYLE_OPTS.map((o) => styleCard(o, f)).join('')}</div>`)}
+      ${step(4, 'الكلام', `<div class="sub-label label">عايز الكلام يكون إزاي؟</div>
+        <div class="goals" role="radiogroup">${GOAL_OPTS.map(([v, t, d]) => `<button type="button" class="goal-opt ${f.goal === v ? 'active' : ''}" data-goal="${v}" role="radio" aria-checked="${f.goal === v}"><b>${t}</b><span>${d}</span></button>`).join('')}</div>
+        <div class="adv-row" style="margin-top:14px"><span class="label">مين بيتكلم</span>${seg('voiceGender', [['MALE', 'راجل'], ['FEMALE', 'ست']])}</div>
+        <div id="scriptBox"></div>`)}
       <details class="advanced" id="advanced">
-        <summary>إعدادات متقدمة</summary>
+        <summary>إعدادات إضافية</summary>
         <div class="adv-body">
           <div class="adv-row"><span class="label">المقاس</span>${seg('aspectRatio', [['9:16', 'طولي 9:16'], ['16:9', 'عرضي 16:9']])}</div>
-          <div class="adv-row"><span class="label">الصوت</span>${seg('voiceGender', [['MALE', 'راجل'], ['FEMALE', 'ست']])}</div>
-          <div class="adv-row"><span class="label">سرعة الكلام</span>${seg('pace', [['fast', 'سريع وحماسي'], ['normal', 'عادي']])}</div>
           <div class="adv-row"><span class="label">موسيقى في الخلفية</span>${seg('music', [['none', 'بدون'], ['light', 'خفيفة']])}</div>
-          <div><label class="label" for="offer">السعر أو العرض</label><input id="offer" type="text" maxlength="200" placeholder="مثلًا: بـ 450 جنيه والشحن مجاني" /><div class="hint">بيتقال في آخر الإعلان.</div></div>
-          <div id="scriptBox"></div>
         </div>
       </details>
       <div class="summary">
@@ -168,15 +170,23 @@ async function renderCreate(view) {
       f[b.dataset.seg] = b.dataset.value;
       $$(`[data-seg="${b.dataset.seg}"]`, view).forEach((x) => x.classList.toggle('active', x === b));
       if (b.dataset.seg === 'aspectRatio') $('#ratioLabel').textContent = f.aspectRatio;
-      if (b.dataset.seg === 'pace') { f.script = null; drawScript(); }
+      if (b.dataset.seg === 'voiceGender') { f.script = null; drawScript(); }
     };
   });
   for (const id of ['description', 'offer']) { const el = $(`#${id}`); el.value = f[id] || ''; el.oninput = () => { f[id] = el.value; }; }
-  if (f.offer || f.script || f.aspectRatio !== '9:16' || f.pace !== 'fast' || f.music !== 'none' || f.voiceGender !== 'MALE') $('#advanced').open = true;
+  if (f.aspectRatio !== '9:16' || f.music !== 'none') $('#advanced').open = true;
+  $$('.goal-opt', view).forEach((b) => {
+    b.onclick = () => {
+      f.goal = b.dataset.goal; f.script = null;
+      $$('.goal-opt', view).forEach((x) => { x.classList.toggle('active', x === b); x.setAttribute('aria-checked', x === b); });
+      drawScript();
+    };
+  });
+  $('#offer').addEventListener('change', () => { if (f.script) { f.script = null; drawScript(); } });
 
   const inputs = () => ({
-    images: f.images, description: f.description, offer: f.offer, style: f.style,
-    aspectRatio: f.aspectRatio, voiceGender: f.voiceGender, pace: f.pace, music: f.music,
+    images: f.images, description: f.description, offer: f.offer, style: f.style, goal: f.goal,
+    aspectRatio: f.aspectRatio, voiceGender: f.voiceGender, music: f.music,
   });
 
   // optional: read and edit the script before ordering (free)
@@ -184,16 +194,16 @@ async function renderCreate(view) {
     const box = $('#scriptBox');
     if (!box) return;
     if (!f.script) {
-      box.innerHTML = '<span class="label">السكريبت</span><button type="button" class="btn small" id="preview">اكتبلي السكريبت أشوفه الأول (مجانًا)</button><div class="hint">اختياري. لو سبته، هنكتبه إحنا وقت الإنشاء.</div>';
+      box.innerHTML = '<button type="button" class="btn block script-btn" id="preview">✍️ اكتبلي السكريبت أشوفه الأول (مجانًا)</button><div class="hint" style="text-align:center">بتشوف الكلام وتعدّله قبل ما تدفع. لو سبته، هنكتبه إحنا وقت الإنشاء.</div>';
       $('#preview').onclick = preview;
       return;
     }
     const labels = (n) => Array.from({ length: n }, (_, i) => (i === 0 ? 'البداية' : i === n - 1 ? 'العرض والطلب' : 'المميزات'));
     const names = labels(f.script.scenes.length);
-    box.innerHTML = `<span class="label">السكريبت <span class="muted" style="font-weight:400">(تقدر تعدّل الكلام)</span></span>
+    box.innerHTML = `<span class="label sub-label">السكريبت <span class="muted" style="font-weight:400">(اتراجع ومتصحّح، وتقدر تعدّل فيه)</span></span>
       ${f.script.scenes.map((sc, i) => `<div class="script-scene"><div class="hint">${names[i]} · ${fmt(f.script.sceneSeconds?.[i] || f.script.clipSeconds)} ثواني · <span data-count="${i}"></span></div><textarea data-scene="${i}" rows="2" style="min-height:64px">${esc(sc.voiceover)}</textarea></div>`).join('')}
       <button type="button" class="btn link" id="preview">اكتب سكريبت تاني</button>`;
-    const limit = (i) => Math.round((f.script.sceneSeconds?.[i] || f.script.clipSeconds) * (f.pace === 'normal' ? 2.4 : 3.4));
+    const limit = (i) => Math.max(8, Math.round((f.script.sceneSeconds?.[i] || f.script.clipSeconds) * 2.3));
     const count = (ta) => { const i = Number(ta.dataset.scene); const n = ta.value.trim().split(/\s+/).filter(Boolean).length; const el = $(`[data-count="${i}"]`, box); el.textContent = `${fmt(n)} كلمة`; el.style.color = n > limit(i) ? 'var(--warn)' : ''; };
     $$('textarea[data-scene]', box).forEach((ta) => { count(ta); ta.oninput = () => { f.script.scenes[Number(ta.dataset.scene)].voiceover = ta.value; count(ta); }; });
     $('#preview').onclick = preview;
@@ -202,10 +212,10 @@ async function renderCreate(view) {
     const err = $('#err');
     err.textContent = '';
     if (!f.images.length) { err.textContent = 'ارفع صورة المنتج الأول.'; return; }
-    if (!f.description.trim()) { err.textContent = 'اكتب وصف قصير للمنتج.'; return; }
+    if (!f.description.trim()) { err.textContent = 'اكتب سطر عن المنتج الأول.'; $('#description').focus(); return; }
     const btn = $('#preview');
     btn.disabled = true;
-    btn.textContent = 'بنفهم المنتج ونكتب…';
+    btn.textContent = 'بنفهم المنتج ونكتب ونراجع الكلام…';
     try {
       f.script = await api('POST', '/api/videos/script-preview', inputs());
       drawScript();
@@ -226,7 +236,7 @@ async function renderCreate(view) {
     try {
       // clientRef: pressing twice (or a retry after a slow network) is still one video and one charge.
       await api('POST', '/api/videos', { ...inputs(), clientRef: f.clientRef, script: f.script ? { product: f.script.product, scenes: f.script.scenes } : undefined });
-      state.form = blankForm({ style: f.style, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender, pace: f.pace, music: f.music });
+      state.form = blankForm({ style: f.style, goal: f.goal, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender, music: f.music });
       await refreshMe();
       toast('بدأنا نعمل الفيديو');
       location.hash = 'videos';

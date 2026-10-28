@@ -18,7 +18,7 @@ import { env } from '../config.js';
 import { AppError } from '../errors.js';
 import { applyCredits, refundVideo } from './credits.js';
 import { parseDataUrl, putBuffer, getDataUrl, IMAGE_MIMES } from './storage.js';
-import { writeScript, scenePrompt, keyframePrompt, userScript, wordsFor, NEGATIVE_PROMPT } from './script.js';
+import { writeScript, scenePrompt, keyframePrompt, userScript, wordsFor, GOALS, NEGATIVE_PROMPT } from './script.js';
 import { planVideo, checkBudget, loadSettings, submitStep, pollStep } from '../engine/index.js';
 import { modelByEndpoint } from '../engine/catalog.js';
 import { recordEvent } from '../engine/budget.js';
@@ -52,7 +52,7 @@ function readInputs(body) {
     style: STYLES.includes(body.style) ? body.style : 'AUTO',
     aspectRatio: RATIOS.includes(body.aspectRatio) ? body.aspectRatio : '9:16',
     voiceGender: body.voiceGender === 'FEMALE' ? 'FEMALE' : 'MALE',
-    options: { music: body.music === 'light' ? 'light' : 'none', pace: body.pace === 'normal' ? 'normal' : 'fast' },
+    options: { music: body.music === 'light' ? 'light' : 'none', pace: body.pace === 'fast' ? 'fast' : 'normal', goal: GOALS.includes(body.goal) ? body.goal : 'SALES' },
   };
 }
 
@@ -96,7 +96,7 @@ export async function previewScript(body) {
   const settings = await loadSettings();
   const { plan } = planVideo({ style: inputs.style, pace: inputs.options.pace, settings });
   const sceneSeconds = plan?.sceneSeconds || Array(env.defaultClipCount()).fill(env.clipSeconds());
-  const script = await writeScript({ ...inputs, clipCount: sceneSeconds.length, sceneSeconds, pace: inputs.options.pace, mode: plan?.mode, imageDataUrl: image.dataUrl });
+  const script = await writeScript({ ...inputs, clipCount: sceneSeconds.length, sceneSeconds, pace: inputs.options.pace, goal: inputs.options.goal, mode: plan?.mode, imageDataUrl: image.dataUrl });
   return { ...script, maxWords: wordsFor(Math.max(...sceneSeconds), inputs.options.pace), sceneSeconds, clipSeconds: sceneSeconds[0] };
 }
 
@@ -305,7 +305,7 @@ async function startJob(job) {
   if (!script) {
     script = await writeScript({
       productName: job.product_name, description: job.description, offer: job.offer, style: job.style,
-      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, mode: plan.mode, imageDataUrl: images[0],
+      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, goal: options.goal, mode: plan.mode, imageDataUrl: images[0],
     });
     const scriptLine = plan.estimate.lines.find((l) => l.step === 'script');
     if (script.source === 'AI' && scriptLine) {

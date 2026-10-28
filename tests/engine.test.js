@@ -178,6 +178,8 @@ test('numbers are spoken as Egyptian words (prices, percents), decimals kept', a
   assert.equal(speakNumbers('3500'), 'تلات تلاف وخمسمية');
   assert.equal(speakNumbers('اطلبيه ب350 جنيه بدل 700'), 'اطلبيه بـ تلاتمية وخمسين جنيه بدل سبعمية');
   assert.equal(speakNumbers('2.5 كيلو'), '2.5 كيلو');
+  assert.equal(speakNumbers('سعره 350ج بدل700'), 'سعره تلاتمية وخمسين جنيه بدل سبعمية');
+  assert.equal(speakNumbers('350 ج.م بس'), 'تلاتمية وخمسين جنيه بس');
 });
 
 test('a too-long spoken line is cut at a clause end, never mid-sentence', async () => {

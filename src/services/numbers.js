@@ -33,7 +33,10 @@ const toLatin = (s) => s.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩
 /** Replaces whole numbers (and "%") in a line with how an Egyptian says them. */
 export function speakNumbers(text) {
   return toLatin(String(text || ''))
-    .replace(/(^|[\s(])ب(?:ـ)?\s*(?=[\d٠-٩])/g, '$1بـ ') // "ب350" / "بـ350" -> "بـ 350": the number stays a word of its own
+    .replace(/(\d)(?=[\u0621-\u064A])/g, '$1 ') // "350ج" -> "350 ج"
+    .replace(/([\u0621-\u064A\u0640])(?=\d)/g, '$1 ') // "بدل700" -> "بدل 700"
+    .replace(/(\d\s*)(?:ج\.?\s*م|ج)(?=$|[\s.,،!؟?])/g, '$1جنيه') // "350 ج" / "350 ج.م" -> "350 جنيه"
+    .replace(/(^|[\s(])ب(?:ـ)?\s*(?=\d)/g, '$1بـ ') // "ب350" / "بـ350" -> "بـ 350": the number stays a word of its own
     .replace(/(\d{1,3}(?:,\d{3})+|\d+)(\s*%)?/g, (m, num, pct, offset, all) => {
       if (/[.\d]/.test(all[offset + m.length] || '') || /[.]/.test(all[offset - 1] || '')) return m; // decimals stay as is
       const n = Number(num.replace(/,/g, ''));

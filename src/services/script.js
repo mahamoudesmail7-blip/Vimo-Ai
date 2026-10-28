@@ -19,10 +19,18 @@ const STYLE_DIRECTION = {
   SHOWCASE: 'Clean product showcase: the product on a tidy real surface, close-up details, slow push-in shots, bright even lighting, a person only as hands or in the background.',
 };
 
+// What the customer wants the words to do (chosen before the script is written).
+export const GOALS = ['SALES', 'EMOTIONAL', 'REVIEW'];
+const GOAL_DIRECTION = {
+  SALES: 'Goal: direct sales. Lead with the main benefit, make the offer clear and end with a confident, clear call to order now.',
+  EMOTIONAL: 'Goal: emotional. Start from a feeling or a small everyday moment the buyer knows well, show how the product makes life feel better, warm and close to the heart; end with a soft, friendly call to order.',
+  REVIEW: 'Goal: an honest personal review. The person tells their own experience like talking to a friend: why they got it, what they liked, one honest detail. Natural and not salesy; end by saying how to order.',
+};
+
 const NEGATIVE = 'product changes shape, product morphing, melting, warped or extra parts, different colors, changed or misspelled logo, distorted hands, extra fingers, cartoon, 3D render, CGI, plastic skin, on-screen text, subtitles, captions, watermark';
 export const MAX_VOICE_WORDS = 27; // ~8 seconds of fast, energetic Egyptian speech
-/** How many spoken words fit a scene: ~3.4 words/s fast, ~2.4 normal. */
-export const wordsFor = (seconds, pace = 'fast') => Math.max(8, Math.round(seconds * (pace === 'normal' ? 2.4 : 3.4)));
+/** How many spoken words fit a scene: ~2.3 words/s at a natural pace (the default), ~3.4 fast. */
+export const wordsFor = (seconds, pace = 'normal') => Math.max(8, Math.round(seconds * (pace === 'fast' ? 3.4 : 2.3)));
 const limitsOf = (clipCount, sceneSeconds, pace) => Array.from({ length: clipCount }, (_, i) => wordsFor(sceneSeconds?.[i] || env.clipSeconds(), pace));
 
 let fetchImpl = (...args) => fetch(...args);
@@ -125,10 +133,11 @@ export function userScript(input, clipCount, { sceneSeconds, pace } = {}) {
 const SYSTEM = [
   'You are the best direct-response creative director in Egypt. You make UGC video ads for TikTok, Reels and Facebook that stop the scroll and sell, and you direct realistic, believable footage.',
   'You write spoken lines the way real Egyptians talk (عامية مصرية), never formal Arabic and never translated-sounding.',
+  'The lines sound like a real person, not an ad and not an AI: simple everyday words, short sentences, nothing fancy.',
   'You reply with one JSON object only, no markdown.',
 ].join(' ');
 
-function scriptRequest({ productName, description, offer, style, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech' }) {
+function scriptRequest({ productName, description, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech' }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
   const secs = Array.from({ length: clipCount }, (_, i) => sceneSeconds?.[i] || env.clipSeconds());
   const voiceover = mode === 'voiceover' || mode === 'hybrid';
@@ -136,8 +145,9 @@ function scriptRequest({ productName, description, offer, style, voiceGender, cl
   return [
     `Product name: ${productName}`,
     description ? `Seller's description: ${description}` : '',
-    offer ? `Offer / price (must be said in the last scene): ${offer}` : '',
+    offer ? `Offer / price (must be said in the last scene, with exactly these prices, spoken like this: "${speakNumbers(offer)}"): ${offer}` : 'No price was given: do not say any price or discount.',
     `Ad style: ${STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC}`,
+    GOAL_DIRECTION[goal] || GOAL_DIRECTION.SALES,
     voiceover ? `Voice: ${speaker} reads the lines as a voiceover over the footage; nobody talks on camera, people only react naturally.` : `Speaker: ${speaker}.`,
     '',
     'STEP 1. Study the attached product photo closely before writing anything:',
@@ -153,10 +163,11 @@ function scriptRequest({ productName, description, offer, style, voiceGender, cl
     '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt).',
     '',
     voiceover ? 'Rules for "voiceover" (the narration for that scene):' : 'Rules for "voiceover" (the line the speaker says on camera):',
-    pace === 'normal'
-      ? `- Egyptian colloquial, warm and natural, like a friend recommending it, at a calm clear pace. Word count per scene: ${limits.map((l, i) => `scene ${i + 1}: ${l - 5}-${l}`).join(', ')}.`
+    pace !== 'fast'
+      ? `- Egyptian colloquial, warm and natural, like a friend recommending it, at a normal relaxed talking pace that is easy to follow. Word count per scene: ${limits.map((l, i) => `scene ${i + 1}: ${l - 4}-${l}`).join(', ')}.`
       : `- Egyptian colloquial, warm and natural, like a friend excitedly recommending it. Fast-paced TikTok energy, short punchy phrases, said quickly with no dead air. Word count per scene: ${limits.map((l, i) => `scene ${i + 1}: ${l - 6}-${l}`).join(', ')}.`,
     '- Specific to THIS product (use what you saw in the photo), no generic filler, do not repeat the product name in every line.',
+    '- Easy to say out loud: common everyday words only, short sentences (3 to 8 words), no rare or formal words, no long words stuck together, no tongue twisters. Every sentence is complete and grammatically right.',
     '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
     '- Facts must be TRUE: only say features, numbers, brand names, materials or specs that are in the seller\'s description or clearly visible in the photo. Never invent power, sizes, guarantees, prices or delivery times. If unsure, describe the benefit in general words instead.',
     '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud. Write prices and numbers as Egyptian words spelled as they are said, with "بـ" as its own word ("بـ تلاتمية وخمسين جنيه"), never digits.',
@@ -182,7 +193,7 @@ function parseJsonObject(text) {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-async function askOpenAi(key, user, imageDataUrl) {
+async function askOpenAi(key, user, imageDataUrl, system = SYSTEM) {
   const content = [{ type: 'text', text: user }];
   if (imageDataUrl) content.push({ type: 'image_url', image_url: { url: imageDataUrl } });
   const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
@@ -191,7 +202,7 @@ async function askOpenAi(key, user, imageDataUrl) {
     body: JSON.stringify({
       model: env.openAiModel(),
       response_format: { type: 'json_object' },
-      messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content }],
+      messages: [{ role: 'system', content: system }, { role: 'user', content }],
     }),
   });
   if (!res.ok) throw new Error(`OpenAI ${res.status}`);
@@ -199,27 +210,57 @@ async function askOpenAi(key, user, imageDataUrl) {
   return data.choices?.[0]?.message?.content;
 }
 
-async function askFal(user, imageDataUrl) {
+async function askFal(user, imageDataUrl, system = SYSTEM, temperature = 0.8) {
   const out = await fal.run('openrouter/router/vision', {
     model: env.scriptModel(),
-    system_prompt: SYSTEM,
+    system_prompt: system,
     prompt: user,
     image_urls: imageDataUrl ? [imageDataUrl] : [],
-    temperature: 0.8,
+    temperature,
     max_tokens: 2500,
   });
   return out?.output;
 }
 
-export async function writeScript({ productName, description, offer, style, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode }) {
+const PROOFREAD = [
+  'You proofread Egyptian Arabic (عامية مصرية) lines that a voice will speak in a video ad.',
+  'Fix every line so that: it is correct, natural Egyptian as people really say it; every sentence is complete and makes sense; it uses only common everyday words that are easy to pronounce (replace rare, formal or hard words with simple ones); it sounds like a real person, not an ad and not an AI.',
+  'Keep the meaning, the order and the facts. Never add a feature, number, brand, guarantee or price that is not already in the line. Prices and numbers stay written as Egyptian words.',
+  'Keep each line at or under its word limit.',
+  'Reply with one JSON object only: {"lines": [string, ...]} with the same number of lines.',
+].join(' ');
+
+/** A second pass over the spoken lines: fixes mistakes and hard words. Falls back to the lines as they are. */
+async function proofread(scenes, limits, offer, imageDataUrl) {
+  const user = [
+    offer ? `The price/offer must stay exactly as: "${speakNumbers(offer)}"` : '',
+    'Lines (with word limits):',
+    ...scenes.map((s, i) => `${i + 1}. (max ${limits[i]} words) ${s.voiceover}`),
+  ].filter(Boolean).join('\n');
+  try {
+    const key = env.openAiKey();
+    const reply = key ? await askOpenAi(key, user, imageDataUrl, PROOFREAD) : await askFal(user, imageDataUrl, PROOFREAD, 0.2);
+    const lines = parseJsonObject(reply)?.lines;
+    if (!Array.isArray(lines) || lines.length !== scenes.length || lines.some((l) => !String(l || '').trim())) return scenes;
+    return scenes.map((s, i) => ({ ...s, voiceover: fitLine(String(lines[i]).replace(/\s+/g, ' '), limits[i]) }));
+  } catch (err) {
+    console.warn('[script] proofread failed, keeping the lines:', err.message);
+    return scenes;
+  }
+}
+
+export async function writeScript({ productName, description, offer, style, goal, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode }) {
   const openAiKey = env.openAiKey();
   const limits = limitsOf(clipCount, sceneSeconds, pace);
   if (!openAiKey && !env.falKey()) return templateScript({ productName, description, offer, clipCount, sceneSeconds, pace });
-  const user = scriptRequest({ productName, description, offer, style, voiceGender, clipCount, sceneSeconds, pace, mode });
+  const user = scriptRequest({ productName, description, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode });
   try {
     const reply = openAiKey ? await askOpenAi(openAiKey, user, imageDataUrl) : await askFal(user, imageDataUrl);
     const parsed = normalize(parseJsonObject(reply), clipCount, limits);
-    if (parsed) return parsed;
+    if (parsed) {
+      parsed.scenes = await proofread(parsed.scenes, limits, offer, imageDataUrl);
+      return { ...parsed, hook: parsed.scenes[0].voiceover, cta: parsed.scenes.at(-1).voiceover };
+    }
     throw new Error('script JSON missing scenes');
   } catch (err) {
     console.warn('[script] AI script failed, using template:', err.message);
@@ -248,9 +289,9 @@ export function keyframePrompt(scene, { product, style, voiceGender, aspectRatio
  * frame, or with `withScene` (Ingredients mode) it builds the scene from the
  * reference images, so the scene is described too.
  */
-export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, withScene = false, mode = 'speech', music = 'none', pace = 'fast' }) {
-  const speech = pace === 'normal'
-    ? 'in Egyptian Arabic dialect, warm and clear at a natural pace, with matching lip movement, finishing the line before the clip ends'
+export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, withScene = false, mode = 'speech', music = 'none', pace = 'normal' }) {
+  const speech = pace !== 'fast'
+    ? 'in Egyptian Arabic dialect, like a real person talking to a friend: relaxed, warm and clear at a normal talking speed (not rushed), pronouncing every word clearly, with matching lip movement, finishing the line before the clip ends'
     : 'in Egyptian Arabic dialect, speaking quickly (a brisk, rapid delivery, never slow or drawn out) and energetic like a fast-paced TikTok ad, clearly, with no pauses and matching lip movement, finishing the line before the clip ends';
   return [
     STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC,
