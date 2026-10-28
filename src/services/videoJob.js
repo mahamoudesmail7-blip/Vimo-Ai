@@ -497,7 +497,7 @@ async function withCaptions(job, buffer) {
     const scenes = parse(job.script_json)?.scenes;
     if (!scenes?.length) return buffer;
     const cues = captionCues({ scenes, sceneSeconds: plan.sceneSeconds, mode: plan.mode, offer: job.offer });
-    return await burnCaptions(buffer, toAss(cues, job.aspect_ratio));
+    return await burnCaptions(buffer, toAss(cues, job.aspect_ratio), { punches: cues.punches, aspectRatio: job.aspect_ratio });
   } catch (err) {
     console.warn(`[worker] job ${job.id}: captions skipped:`, err.message);
     return buffer;

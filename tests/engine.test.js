@@ -167,4 +167,5 @@ test('captions: two short lines per cue inside each scene, offer badge on the la
   const ass = toAss(c, '9:16');
   assert.match(ass, /PlayResY: 1280/);
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 5);
+  assert.deepEqual(c.punches, [[4, 8], [11, 14]], 'a punch-in halfway through each talking scene');
 });

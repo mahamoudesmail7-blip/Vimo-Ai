@@ -3,6 +3,9 @@
 // the speech like the best-performing Arabic ads. The offer (price, discount)
 // shows as a yellow badge during the last scene.
 //
+// Editing effect: a quick punch-in zoom halfway through each talking scene,
+// like TikTok editors do, so a long take never feels static.
+//
 // Timing is estimated from the script (no speech recognition): in "speech"
 // mode each scene's line is spread over its own clip; with a voiceover the
 // whole text is spread from the start at the voice's pace.
@@ -61,9 +64,18 @@ export function captionCues({ scenes, sceneSeconds, mode, offer }) {
     const all = scenes.flatMap((s) => words(s.voiceover));
     cues = cuesFor(all, 0.2, Math.min(total - 0.3, 0.2 + all.length / VOICE_WORDS_PER_SECOND));
   }
+  // punch-in for the second half of each talking scene (hybrid photo scenes already move)
+  const punches = [];
+  if (mode !== 'hybrid') {
+    let start = 0;
+    for (const secs of sceneSeconds) {
+      if (secs >= 4) punches.push([round(start + secs / 2), round(start + secs)]);
+      start += secs;
+    }
+  }
   const last = sceneSeconds.at(-1) || 0;
   const badge = offer ? { text: words(offer).join(' ').slice(0, 48), start: round(Math.max(0, total - last)), end: round(total) } : null;
-  return { cues, badge, total };
+  return { cues, badge, total, punches };
 }
 
 const ts = (s) => {
@@ -101,8 +113,20 @@ export function toAss({ cues, badge }, aspectRatio = '9:16') {
   ].join('\n');
 }
 
-/** Burns the captions into an MP4 (audio copied as is). */
-export async function burnCaptions(buffer, ass) {
+const PUNCH = 1.1;
+
+/** The video filter: punch-in zooms (if any), then the captions. */
+export function captionFilter({ punches = [] } = {}, aspectRatio = '9:16') {
+  const [W, H] = aspectRatio === '16:9' ? [1280, 720] : [720, 1280];
+  const base = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1`;
+  if (!punches.length) return `${base},ass=c.ass:fontsdir=${FONTS_DIR}`;
+  const on = punches.map(([a, b]) => `between(t\\,${a}\\,${b})`).join('+');
+  const z = `if(${on}\\,${PUNCH}\\,1)`;
+  return `${base},scale=w='trunc(${W}*${z}/2)*2':h='trunc(${H}*${z}/2)*2':eval=frame,crop=${W}:${H},ass=c.ass:fontsdir=${FONTS_DIR}`;
+}
+
+/** Burns the captions (and the punch-in zooms) into an MP4; audio copied as is. */
+export async function burnCaptions(buffer, ass, { punches = [], aspectRatio = '9:16' } = {}) {
   if (!ffmpegPath()) throw new Error('ffmpeg مش موجود على السيرفر.');
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vimo-cap-'));
   try {
@@ -111,7 +135,7 @@ export async function burnCaptions(buffer, ass) {
     await fs.writeFile(input, buffer);
     await fs.writeFile(path.join(dir, 'c.ass'), ass);
     await new Promise((resolve, reject) => {
-      const child = spawn(ffmpegPath(), ['-y', '-loglevel', 'error', '-i', 'in.mp4', '-vf', `ass=c.ass:fontsdir=${FONTS_DIR}`,
+      const child = spawn(ffmpegPath(), ['-y', '-loglevel', 'error', '-i', 'in.mp4', '-vf', captionFilter({ punches }, aspectRatio),
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-c:a', 'copy', '-movflags', '+faststart', 'out.mp4'], { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
       let err = '';
       child.stderr.on('data', (d) => { err = (err + d).slice(-1000); });
