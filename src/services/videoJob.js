@@ -24,7 +24,7 @@ import { modelByEndpoint } from '../engine/catalog.js';
 import { recordEvent } from '../engine/budget.js';
 import { EngineError, isTransient } from '../engine/errors.js';
 import { toBuffer } from '../engine/media.js';
-import { composeHybrid, ffmpegPath } from '../engine/compose.js';
+import { composeHybrid, joinClips, ffmpegPath } from '../engine/compose.js';
 import { captionCues, toAss, burnCaptions } from '../engine/captions.js';
 import { speakNumbers } from './numbers.js';
 import { checkClip, passes, STT_MODEL, STT_USD } from '../engine/speechCheck.js';
@@ -476,6 +476,16 @@ async function pollClips(job, images = null) {
   }
   if (clips.length === 1) return afterMerge(job, plan, clips[0].url);
 
+  // Talking clips are joined here with hard cuts (hides Veo's blurred clip ends); fal joins them if that fails.
+  if (plan.mode === 'speech' && ffmpegPath()) {
+    try {
+      const joined = await joinClips(clips.map((c) => ({ url: c.url, seconds: c.seconds })), job.aspect_ratio);
+      const tmp = await putBuffer(joined, 'video/mp4', 'joined'); // captions are still burned in when it is stored
+      return afterMerge(job, plan, `blob:${tmp.key}`);
+    } catch (err) {
+      console.warn(`[worker] job ${job.id}: local join failed, joining on fal:`, err.message);
+    }
+  }
   const merge = { key: 'merge' };
   await submitStep(job, merge, plan.models.merge, 'merge', { videoUrls: clips.map((c) => c.url) }, { seconds: plan.seconds });
   return save(job, { status: 'MERGING', progress: 82, merge_json: JSON.stringify(merge) });
@@ -529,6 +539,7 @@ async function storeVideo(job) {
     return save(job, { status: 'COMPLETED', progress: 100, video_key: ref.slice(5), video_bytes: blob?.bytes || null, finished_at: new Date(), error: null });
   }
   const stored = await putBuffer(await withCaptions(job, await toBuffer(ref)), 'video/mp4', 'videos');
+  if (ref.startsWith('blob:joined/')) await prisma.blob.delete({ where: { key: ref.slice(5) } }).catch(() => {});
   return save(job, { status: 'COMPLETED', progress: 100, video_key: stored.key, video_bytes: stored.bytes, finished_at: new Date(), error: null });
 }
 

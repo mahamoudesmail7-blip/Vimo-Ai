@@ -189,7 +189,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   const prompts = fake.submitted.slice(before).filter((x) => x.body.image_url).map((x) => x.body.prompt);
   const { speakNumbers } = await import('../src/services/numbers.js');
   assert.ok(edited.every((e, i) => prompts[i].includes(speakNumbers(e.voiceover))), 'each clip speaks the edited line');
-  assert.ok(prompts[2].includes('تلاتمية جنيه'), 'the price is spoken as words');
+  assert.ok(prompts[2].includes('تلات مية جنيه'), 'the price is spoken as words');
   assert.equal(JSON.parse(mine.script_json).source, 'USER_EDITED');
 
   // remake: same photo and script, a new charged render; not someone else's video
@@ -422,5 +422,25 @@ test('speech check: a garbled talking clip is made again once, same first frame'
     assert.ok(events.some((e) => /بنعيده/.test(e.message)), 'the admin sees why');
   } finally {
     fake.hear = null;
+  }
+});
+
+test('talking clips are joined on our server with hard cuts, fal is not asked to merge', { skip }, async () => {
+  fake.realMedia = true;
+  try {
+    const user = client();
+    const admin = client();
+    await admin('POST', '/api/auth/login', { email: 'boss@test.dev', password: 'secret123' });
+    let r = await user('POST', '/api/auth/signup', { name: 'Adel', email: 'adel@test.dev', password: 'secret123' });
+    await admin('POST', `/api/admin/users/${r.data.user.id}/credits`, { delta: 1 });
+    const start = fake.submitted.length;
+    r = await user('POST', '/api/videos', { description: 'كوتشي رجالي', images: [PNG_REAL], style: 'STUDIO' });
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    const job = await settle(r.data.id, 30);
+    assert.equal(job.status, 'COMPLETED', job.error);
+    assert.equal(fake.submitted.slice(start).filter((x) => x.model.includes('merge')).length, 0, 'joined here');
+    assert.equal(await prisma.blob.count({ where: { key: { startsWith: 'joined/' } } }), 0, 'the temporary join is cleaned up');
+  } finally {
+    fake.realMedia = false;
   }
 });

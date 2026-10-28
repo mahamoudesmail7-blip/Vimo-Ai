@@ -84,7 +84,7 @@ test('the script is written by a vision LLM on fal when there is no OpenAI key',
     assert.deepEqual(sent.body.image_urls, ['data:image/png;base64,AA']);
     assert.match(sent.body.prompt, /how it is physically held and used/);
     assert.match(sent.body.prompt, /Goal: emotional/);
-    assert.match(sent.body.prompt, /تلاتمية وخمسين جنيه بدل سبعمية/);
+    assert.match(sent.body.prompt, /تلات مية وخمسين جنيه بدل سبع مية/);
     assert.match(check.body.system_prompt, /proofread/);
     assert.deepEqual(s.scenes.map((x) => x.voiceover), ['سطر مصحّح 1', 'سطر مصحّح 2', 'سطر مصحّح 3']);
     assert.equal(s.hook, 'سطر مصحّح 1');

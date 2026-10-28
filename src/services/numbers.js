@@ -1,11 +1,11 @@
 // Prices and numbers are written out in Egyptian words before a line is
-// spoken ("350" -> "تلاتمية وخمسين"), so the voice never reads digits
+// spoken ("350" -> "تلات مية وخمسين"), so the voice never reads digits
 // wrong. Captions and the offer badge keep showing the digits.
 const ONES = ['', 'واحد', 'اتنين', 'تلاتة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'تمانية', 'تسعة', 'عشرة',
   'حداشر', 'اتناشر', 'تلاتاشر', 'أربعتاشر', 'خمستاشر', 'ستاشر', 'سبعتاشر', 'تمنتاشر', 'تسعتاشر'];
 const TENS = ['', '', 'عشرين', 'تلاتين', 'أربعين', 'خمسين', 'ستين', 'سبعين', 'تمانين', 'تسعين'];
-// spelled the way they are said, so the voice reads them right ("تلاتمية", not "تلتمية")
-const HUNDREDS = ['', 'مية', 'ميتين', 'تلاتمية', 'ربعمية', 'خمسمية', 'ستمية', 'سبعمية', 'تمانمية', 'تسعمية'];
+// two words, the way they are said: the voice garbles "تمانمية" but says "تمن مية" right
+const HUNDREDS = ['', 'مية', 'ميتين', 'تلات مية', 'ربع مية', 'خمس مية', 'ست مية', 'سبع مية', 'تمن مية', 'تسع مية'];
 const FEW_THOUSANDS = ['', 'ألف', 'ألفين', 'تلات تلاف', 'أربع تلاف', 'خمس تلاف', 'ست تلاف', 'سبع تلاف', 'تمن تلاف', 'تسع تلاف', 'عشر تلاف'];
 
 function below1000(n) {
@@ -36,7 +36,7 @@ export function speakNumbers(text) {
     .replace(/(\d)(?=[\u0621-\u064A])/g, '$1 ') // "350ج" -> "350 ج"
     .replace(/([\u0621-\u064A\u0640])(?=\d)/g, '$1 ') // "بدل700" -> "بدل 700"
     .replace(/(\d\s*)(?:ج\.?\s*م|ج)(?=$|[\s.,،!؟?])/g, '$1جنيه') // "350 ج" / "350 ج.م" -> "350 جنيه"
-    .replace(/(^|[\s(])ب(?:ـ)?\s*(?=\d)/g, '$1بـ ') // "ب350" / "بـ350" -> "بـ 350": the number stays a word of its own
+    .replace(/(^|[\s(])ب(?:ـ)?\s*(?=\d)/g, '$1بسعر ') // "ب350" -> "بسعر 350": the voice garbles a ب stuck to a number
     .replace(/(\d{1,3}(?:,\d{3})+|\d+)(\s*%)?/g, (m, num, pct, offset, all) => {
       if (/[.\d]/.test(all[offset + m.length] || '') || /[.]/.test(all[offset - 1] || '')) return m; // decimals stay as is
       const n = Number(num.replace(/,/g, ''));

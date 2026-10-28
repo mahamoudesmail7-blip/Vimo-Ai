@@ -167,22 +167,23 @@ test('captions: two short lines per cue inside each scene, offer badge on the la
   const ass = toAss(c, '9:16');
   assert.match(ass, /PlayResY: 1280/);
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 5);
-  assert.deepEqual(c.punches, [[4, 8], [11, 14]], 'a punch-in halfway through each talking scene');
+  assert.deepEqual(c.punches, [[0, 8], [8, 14]], 'a slow push-in over each talking scene');
+  assert.equal(captionCues({ scenes: [{ voiceover: 'اطلبها بـ خمس مية' }], sceneSeconds: [6], mode: 'speech' }).cues[0].top, 'اطلبها بخمس مية', 'no lone بـ on screen');
 });
 
 test('numbers are spoken as Egyptian words (prices, percents), decimals kept', async () => {
   const { speakNumbers } = await import('../src/services/numbers.js');
-  assert.equal(speakNumbers('بـ 299 جنيه بدل 450'), 'بـ ميتين وتسعة وتسعين جنيه بدل ربعمية وخمسين');
+  assert.equal(speakNumbers('بـ 299 جنيه بدل 450'), 'بسعر ميتين وتسعة وتسعين جنيه بدل ربع مية وخمسين');
   assert.equal(speakNumbers('خصم 50%'), 'خصم خمسين في المية');
-  assert.equal(speakNumbers('بـ 1,500 جنيه و ١٢٠٠'), 'بـ ألف وخمسمية جنيه و ألف وميتين');
-  assert.equal(speakNumbers('3500'), 'تلات تلاف وخمسمية');
-  assert.equal(speakNumbers('اطلبيه ب350 جنيه بدل 700'), 'اطلبيه بـ تلاتمية وخمسين جنيه بدل سبعمية');
+  assert.equal(speakNumbers('بـ 1,500 جنيه و ١٢٠٠'), 'بسعر ألف وخمس مية جنيه و ألف وميتين');
+  assert.equal(speakNumbers('3500'), 'تلات تلاف وخمس مية');
+  assert.equal(speakNumbers('اطلبيه ب350 جنيه بدل 700'), 'اطلبيه بسعر تلات مية وخمسين جنيه بدل سبع مية');
   assert.equal(speakNumbers('2.5 كيلو'), '2.5 كيلو');
-  assert.equal(speakNumbers('سعره 350ج بدل700'), 'سعره تلاتمية وخمسين جنيه بدل سبعمية');
-  assert.equal(speakNumbers('350 ج.م بس'), 'تلاتمية وخمسين جنيه بس');
+  assert.equal(speakNumbers('سعره 350ج بدل700'), 'سعره تلات مية وخمسين جنيه بدل سبع مية');
+  assert.equal(speakNumbers('350 ج.م بس'), 'تلات مية وخمسين جنيه بس');
   const { speakOffer } = await import('../src/services/numbers.js');
-  assert.equal(speakOffer('500 بدل 800'), 'خمسمية جنيه بدل تمانمية', 'جنيه is added when the seller left it out');
-  assert.equal(speakOffer('بـ 450 جنيه والشحن مجاني'), 'بـ ربعمية وخمسين جنيه والشحن مجاني');
+  assert.equal(speakOffer('500 بدل 800'), 'خمس مية جنيه بدل تمن مية', 'جنيه is added when the seller left it out');
+  assert.equal(speakOffer('بـ 450 جنيه والشحن مجاني'), 'بسعر ربع مية وخمسين جنيه والشحن مجاني');
   assert.equal(speakOffer('خصم 50%'), 'خصم خمسين في المية');
 });
 

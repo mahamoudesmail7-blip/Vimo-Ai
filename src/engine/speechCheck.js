@@ -14,6 +14,7 @@ export function normalizeWords(text) {
   return speakNumbers(String(text || ''))
     .replace(/[ً-ٰٟـ]/g, '')
     .replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+    .replace(/(تلات|ربع|خمس|ست|سبع|تمن|تمان|تسع) مي[ةه]/g, '$1مية') // "خمس مية" and "خمسمية" are the same word
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/).filter(Boolean)
     // "و" / "ب" stuck to a word are often heard apart, and the other way round

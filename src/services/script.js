@@ -15,14 +15,14 @@ const STYLE_DIRECTION = {
   AUTO: 'High-converting Egyptian social ad: a real Egyptian person using the product in a real home, mixed with sharp close-ups of the product details, natural light, filmed on a smartphone.',
   UGC: 'Authentic user-generated-content look: filmed on a smartphone, handheld, natural home lighting, a real Egyptian person talking to the camera like a TikTok review.',
   CINEMATIC: 'Premium cinematic product commercial: smooth slow camera moves, soft natural light, shallow depth of field, an elegant real Egyptian home or street setting.',
-  STUDIO: 'Polished talking-head ad in a modern content-creator studio: the speaker sits on a cream boucle armchair facing the camera, in front of a deep teal-green wall with warm glowing lamps, wooden shelves and green plants, soft warm key light on the face, shallow depth of field with creamy bokeh, shot on a cinema camera, holding or showing the product.',
+  STUDIO: 'Polished talking-head ad in a modern content-creator studio: the speaker sits on a cream boucle armchair facing the camera, in front of a deep teal-green wall with warm glowing lamps, wooden shelves and green plants, soft warm key light on the face, shallow depth of field with creamy bokeh, shot on a cinema camera, holding or showing the product. The hook scene is seated; the middle scene may stand up in the same studio to use or wear the product.',
   SHOWCASE: 'Clean product showcase: the product on a tidy real surface, close-up details, slow push-in shots, bright even lighting, a person only as hands or in the background.',
 };
 
 // What the customer wants the words to do (chosen before the script is written).
 export const GOALS = ['SALES', 'EMOTIONAL', 'REVIEW'];
 const GOAL_DIRECTION = {
-  SALES: 'Goal: direct sales. Lead with the main benefit, make the offer clear and end with a confident, clear call to order now.',
+  SALES: 'Goal: direct sales. Lead with the main benefit, make the viewer picture owning it, make the offer feel like a deal and end with a confident, clear call to order now.',
   EMOTIONAL: 'Goal: emotional. Start from a feeling or a small everyday moment the buyer knows well, show how the product makes life feel better, warm and close to the heart; end with a soft, friendly call to order.',
   REVIEW: 'Goal: an honest personal review. The person tells their own experience like talking to a friend: why they got it, what they liked, one honest detail. Natural and not salesy; end by saying how to order.',
 };
@@ -161,8 +161,9 @@ function scriptRequest({ productName, description, offer, style, goal, voiceGend
     '- Scene 1 is the hook: in the first 2 seconds hit a real pain, fear or desire of the buyer, or say something surprising. It must make an Egyptian stop scrolling. A short direct question about an everyday situation works best (e.g. "رجلك بتوجعك من الجزمة كل ما تنزل؟", "البرد موقف شغلك؟"). Think of three hooks and keep the strongest. The hook never uses made-up numbers or times ("بعد ساعتين", "في 5 دقايق") unless the seller gave them.',
     '- It is ONE person in ONE place for the whole ad, talking straight to the camera like a real review, holding the product near their face or using it. Every scene\'s "visual" keeps the same person, outfit and place; only the framing changes (medium shot, close-up on the product in hand).',
     '- The lines flow as one continuous talk across the scenes, like the person never stopped talking.',
-    '- Middle scene(s): show the product being used correctly and give one or two concrete benefits the buyer feels in daily life (comfort, saving time, looking good), plus the colors/variants if there are several.',
-    '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt). Say the price like "دلوقتي بـ خمسمية جنيه بس بدل تمانمية", never "بخصم خمسمية".',
+    '- Middle scene(s): the product is IN USE, never just held: shoes are worn on the feet (the person stands or walks a few steps, feet clearly in frame), clothes are worn, a tool or gadget is doing its job. Same person and place. Give one or two concrete benefits the buyer feels in daily life, plus the colors/variants if there are several.',
+    '- Make it persuasive, not plain: every line gives a reason to buy. Help the viewer picture the moment ("تخيل تلف اليوم كله ورجلك مرتاحة"), use a reaction or a feeling, no empty filler ("سهلة تلبسها" alone is weak: say what it gives them).',
+    '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt). Say the price like "سعرها دلوقتي خمس مية جنيه بس، بدل تمن مية", never "بخصم خمسمية" and never a ب stuck to the number.',
     '- Never use the same word twice close together (e.g. "دلوقتي" twice in the last scene).',
     '',
     voiceover ? 'Rules for "voiceover" (the narration for that scene):' : 'Rules for "voiceover" (the line the speaker says on camera):',
@@ -173,11 +174,13 @@ function scriptRequest({ productName, description, offer, style, goal, voiceGend
     '- Easy to say out loud: common everyday words only, short sentences (3 to 8 words), no rare or formal words, no long words stuck together, no tongue twisters. Every sentence is complete and grammatically right.',
     '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
     '- Facts must be TRUE: only say features, numbers, brand names, materials or specs that are in the seller\'s description or clearly visible in the photo. Never invent power, sizes, guarantees, prices or delivery times. If unsure, describe the benefit in general words instead.',
-    '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud. Write prices and numbers as Egyptian words spelled as they are said, with "بـ" as its own word ("بـ تلاتمية وخمسين جنيه"), never digits.',
+    '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud. Write prices and numbers as Egyptian words spelled as they are said, hundreds as two words ("خمس مية", "تمن مية"), never digits, and never a ب stuck to a price: say "سعرها خمس مية جنيه بس".',
     '',
     'Rules for "visual" (the first frame, in English, max 90 words). It becomes a real photo made from the product photo, so:',
     '- describe ONE photorealistic smartphone-camera frame: a real Egyptian setting, the speaker, framing, light;',
     '- the product appears exactly as in the photo, fully visible, at real-world size, held or used correctly as found in STEP 1;',
+    '- when a scene\'s line names several colors or models, its visual shows ALL of them together, each exactly as in its photo (e.g. the person holds one pair and the other pairs sit next to them);',
+    '- when a scene shows the product in use (worn, used), the visual makes that use clearly visible (e.g. full-body or feet shot with the shoes on);',
     '- no text, no logos other than the product\'s own, no other products.',
     '',
     'Rules for "motion" (in English, max 50 words): what moves during the clip. Keep it simple and physically plausible: the speaker talks to the camera with natural gestures, small hand moves, a slow camera push or handheld sway. The product stays rigid and identical; it never transforms, opens or changes unless that is how it is really used.',
@@ -228,7 +231,7 @@ async function askFal(user, imageDataUrl, system = SYSTEM, temperature = 0.8) {
 const PROOFREAD = [
   'You proofread Egyptian Arabic (عامية مصرية) lines that a voice will speak in a video ad.',
   'Fix every line so that: it is correct, natural Egyptian as people really say it; every sentence is complete and makes sense; it uses only common everyday words that are easy to pronounce (replace rare, formal or hard words with simple ones); it sounds like a real person, not an ad and not an AI.',
-  'Pick the word an Egyptian really uses (e.g. "نعلها طري" not "نعلها ناعم", "جزمة" or "كوتشي" not "حذاء"). Never repeat the same word twice close together. A price reads like "بـ خمسمية جنيه بس بدل تمانمية", never "بخصم خمسمية". Remove any made-up number or time that is not in the seller\'s description.',
+  'Pick the word an Egyptian really uses (e.g. "نعلها طري" not "نعلها ناعم", "جزمة" or "كوتشي" not "حذاء"). Never repeat the same word twice close together. A price reads like "سعرها خمس مية جنيه بس، بدل تمن مية": hundreds as two words, never a ب stuck to the number, never "بخصم خمسمية". Remove any made-up number or time that is not in the seller\'s description.',
   'Keep the meaning, the order and the facts. Never add a feature, number, brand, guarantee or price that is not already in the line. Prices and numbers stay written as Egyptian words.',
   'Keep each line at or under its word limit.',
   'Then, for the voice only, write each corrected line again in "spoken" with Arabic diacritics (تشكيل) on the words a voice could read wrong (e.g. "شَنطِتك", "هيِوَفّر"); leave every other word and all letters exactly the same.',
