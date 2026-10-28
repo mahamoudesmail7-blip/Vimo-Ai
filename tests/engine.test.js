@@ -180,6 +180,10 @@ test('numbers are spoken as Egyptian words (prices, percents), decimals kept', a
   assert.equal(speakNumbers('2.5 كيلو'), '2.5 كيلو');
   assert.equal(speakNumbers('سعره 350ج بدل700'), 'سعره تلاتمية وخمسين جنيه بدل سبعمية');
   assert.equal(speakNumbers('350 ج.م بس'), 'تلاتمية وخمسين جنيه بس');
+  const { speakOffer } = await import('../src/services/numbers.js');
+  assert.equal(speakOffer('500 بدل 800'), 'خمسمية جنيه بدل تمانمية', 'جنيه is added when the seller left it out');
+  assert.equal(speakOffer('بـ 450 جنيه والشحن مجاني'), 'بـ ربعمية وخمسين جنيه والشحن مجاني');
+  assert.equal(speakOffer('خصم 50%'), 'خصم خمسين في المية');
 });
 
 test('a too-long spoken line is cut at a clause end, never mid-sentence', async () => {

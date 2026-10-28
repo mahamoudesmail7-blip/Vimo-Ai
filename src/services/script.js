@@ -9,7 +9,7 @@
 // fails a template script is used, so a video can always be made.
 import { env } from '../config.js';
 import * as fal from './fal.js';
-import { speakNumbers } from './numbers.js';
+import { speakNumbers, speakOffer } from './numbers.js';
 
 const STYLE_DIRECTION = {
   AUTO: 'High-converting Egyptian social ad: a real Egyptian person using the product in a real home, mixed with sharp close-ups of the product details, natural light, filmed on a smartphone.',
@@ -146,7 +146,7 @@ function scriptRequest({ productName, description, offer, style, goal, voiceGend
   return [
     `Product name: ${productName}`,
     description ? `Seller's description: ${description}` : '',
-    offer ? `Offer / price (must be said in the last scene, with exactly these prices, spoken like this: "${speakNumbers(offer)}"): ${offer}` : 'No price was given: do not say any price or discount.',
+    offer ? `Offer / price (must be said in the last scene, with exactly these prices, spoken like this: "${speakOffer(offer)}"): ${offer}` : 'No price was given: do not say any price or discount.',
     `Ad style: ${STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC}`,
     GOAL_DIRECTION[goal] || GOAL_DIRECTION.SALES,
     voiceover ? `Voice: ${speaker} reads the lines as a voiceover over the footage; nobody talks on camera, people only react naturally.` : `Speaker: ${speaker}.`,
@@ -242,7 +242,7 @@ function withSpoken(voiceover, spoken) {
 /** A second pass over the spoken lines: fixes mistakes and hard words. Falls back to the lines as they are. */
 async function proofread(scenes, limits, offer, imageDataUrl) {
   const user = [
-    offer ? `The price/offer must stay exactly as: "${speakNumbers(offer)}"` : '',
+    offer ? `The price/offer must stay exactly as: "${speakOffer(offer)}"` : '',
     'Lines (with word limits):',
     ...scenes.map((s, i) => `${i + 1}. (max ${limits[i]} words) ${s.voiceover}`),
   ].filter(Boolean).join('\n');

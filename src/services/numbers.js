@@ -44,3 +44,17 @@ export function speakNumbers(text) {
       return `${egyptianNumber(n)}${pct ? ' في المية' : ''}`;
     });
 }
+
+const CURRENCY = /جنيه|جنية|ج\.?\s*م|(^|[\s\d])ج($|[\s.,،])|ريال|درهم|دينار|دولار|\$|EGP|LE|L\.E/i;
+
+/**
+ * The price as it should be said: in words, and with "جنيه" after the first
+ * price when the seller left the currency out ("500 بدل 800" ->
+ * "خمسمية جنيه بدل تمانمية").
+ */
+export function speakOffer(offer) {
+  const text = String(offer || '').trim();
+  if (!text) return '';
+  if (CURRENCY.test(text) || /%/.test(text)) return speakNumbers(text);
+  return speakNumbers(text.replace(/(\d[\d,]*)/, '$1 جنيه'));
+}
