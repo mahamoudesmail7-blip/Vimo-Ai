@@ -27,6 +27,7 @@ import { toBuffer } from '../engine/media.js';
 import { composeHybrid, ffmpegPath } from '../engine/compose.js';
 import { captionCues, toAss, burnCaptions } from '../engine/captions.js';
 import { speakNumbers } from './numbers.js';
+import { checkClip, passes, STT_MODEL, STT_USD } from '../engine/speechCheck.js';
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
 const MAX_CLIP_ATTEMPTS = 2;
@@ -89,9 +90,19 @@ export async function quote() {
   return { credits: 1, seconds: plan?.seconds || env.clipSeconds() * env.defaultClipCount(), available: Boolean(plan) };
 }
 
+/**
+ * «تلقائي» picks the cheapest production, except a customer's first video:
+ * that one is made in the studio look, so the first result is the best one.
+ */
+async function resolveStyle(userId, inputs) {
+  if (inputs.style !== 'AUTO' || !userId) return inputs;
+  const made = await prisma.videoJob.count({ where: { user_id: userId, status: 'COMPLETED' } });
+  return made ? inputs : { ...inputs, style: 'STUDIO' };
+}
+
 /** Write the script for the customer to read and edit before paying a credit. */
-export async function previewScript(body) {
-  const inputs = readInputs(body);
+export async function previewScript(body, userId = null) {
+  const inputs = await resolveStyle(userId, readInputs(body));
   const [image] = readImages(body);
   const settings = await loadSettings();
   const { plan } = planVideo({ style: inputs.style, pace: inputs.options.pace, settings });
@@ -140,7 +151,7 @@ export async function createVideo(userId, body) {
     const existing = await prisma.videoJob.findUnique({ where: { client_ref: clientRef } });
     if (existing) return serialize(existing);
   }
-  const inputs = readInputs(body);
+  const inputs = await resolveStyle(userId, readInputs(body));
   const { plan, settings } = await planOrRefuse(inputs);
   let script = null;
   if (body.script) {
@@ -329,7 +340,7 @@ async function startJob(job) {
     attempts: 0,
   }));
   const audio = plan.mode !== 'speech'
-    ? { tts: { key: 'tts', text: speakNumbers(script.scenes.map((s) => s.voiceover).join(' ... ')), status: 'PENDING', attempts: 0 } }
+    ? { tts: { key: 'tts', text: speakNumbers(script.scenes.map(spokenLine).join(' ... ')), status: 'PENDING', attempts: 0 } }
     : null;
   job = await save(job, { script_json: JSON.stringify(script), clips_json: JSON.stringify(clips), audio_json: audio ? JSON.stringify(audio) : null, status: 'GENERATING', progress: 10 });
   return pollClips(job, images);
@@ -389,8 +400,38 @@ async function advanceFrame(job, plan, clip, images, clips = []) {
   }
 }
 
+// The words a talking clip should say (with pronunciation marks when the proofread added them).
+const spokenLine = (scene) => scene?.spoken || scene?.voiceover || '';
+
+/**
+ * Listens to a finished talking clip. A garbled or cut-off take is made again
+ * once (same first frame, so the same person); then the better take is kept.
+ */
+async function listenToClip(job, clip, scene) {
+  const r = await checkClip(clip.url, scene.voiceover);
+  if (!r) { clip.speech = { checked: false }; return; }
+  await recordEvent({ jobId: job.id, provider: 'fal', model: STT_MODEL, kind: 'CHARGE', usd: STT_USD });
+  await prisma.videoJob.update({ where: { id: job.id }, data: { cost_actual_usd: { increment: STT_USD } } });
+  clip.takes = [...(clip.takes || []), { url: clip.url, score: r.score, ending: r.ending, heard: r.heard }];
+  if (!passes(r) && clip.takes.length < 2) {
+    await recordEvent({ jobId: job.id, provider: 'engine', kind: 'ERROR', message: `المشهد ${clip.index + 1}: الكلام مش مظبوط (${Math.round(r.score * 100)}%)، بنعيده مرة. اتسمع: ${r.heard}` });
+    if (!/Say every word slowly/.test(clip.prompt)) clip.prompt += ' Say every word slowly and clearly, exactly as written.';
+    clip.status = 'PENDING';
+    return;
+  }
+  keepBestTake(clip);
+}
+
+function keepBestTake(clip) {
+  const rank = (t) => t.score + (t.ending ? 0.2 : 0);
+  const best = clip.takes.reduce((a, b) => (rank(b) > rank(a) ? b : a));
+  Object.assign(clip, { url: best.url, status: 'COMPLETED', speech: { checked: true, score: best.score, ending: best.ending, takes: clip.takes.length } });
+}
+
 async function pollClips(job, images = null) {
   const plan = planOf(job);
+  const script = parse(job.script_json);
+  const listen = plan.mode === 'speech' && Boolean(env.falKey()) && (await loadSettings()).speechCheck !== false;
   const clips = parse(job.clips_json) || [];
   const audio = parse(job.audio_json);
   const loadImages = async () => (images = images || await productImages(job));
@@ -409,7 +450,9 @@ async function pollClips(job, images = null) {
         continue;
       }
       const st = await settle(job, clip, `المشهد ${clip.index + 1}`);
+      if (st === 'FAILED' && clip.takes?.length) { keepBestTake(clip); continue; } // the re-take failed: keep the first one
       if (st === 'FAILED') { failed = `فشل إنشاء المشهد ${clip.index + 1}: ${clip.error}`; break; }
+      if (st === 'COMPLETED' && listen && clip.provider === 'fal' && !clip.speech && script?.scenes?.[clip.index]) await listenToClip(job, clip, script.scenes[clip.index]);
     }
     const tts = audio?.tts;
     if (!failed && tts && tts.status !== 'COMPLETED') {

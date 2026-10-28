@@ -128,3 +128,21 @@ test('an empty fal balance is reported as NO_BALANCE, and cleared by the next ac
     process.env.FAL_KEY = '';
   }
 });
+
+test('speech check: a clean take passes, a garbled or cut-off one is re-made', async () => {
+  const { speechScore, passes } = await import('../src/engine/speechCheck.js');
+  const line = 'ومش بيأذي بشرتك، وحجمه صغير تحطيه في شنطتك، وبشرتك ناعمة في ثواني. اطلبيه دلوقتي بـ 350 جنيه بس بدل 700، والشحن لحد باب البيت.';
+  assert.ok(passes(speechScore('بتقضي وقت كتير في إزالة شعر الوش، وكل مرة بيرجع تاني؟', 'بتقضي وقت كتير في ازاله شعر الوش وكل مره بيرجع تاني')));
+  assert.ok(passes(speechScore('بـ 350 جنيه بس', 'بتلاتمية وخمسين جنيه بس')), 'digits and words match');
+  // a real garbled take (heard by speech-to-text)
+  assert.ok(!passes(speechScore(line, 'ومش بيأذي بشرتك وحق مصغير تغذيف شانتتك وبشرتك نعمة فسويني اطلو بيد الوقت بتلطمية وخمسين جني بس بدل سبع مية والشحن الحد باب البيت')));
+  assert.ok(!passes(speechScore('اطلبيه دلوقتي والشحن لحد باب البيت.', 'اطلبيه دلوقتي')), 'stopped before the end');
+});
+
+test('the voice-only marked line is kept only while the line is unchanged', () => {
+  const scenes = [{ voiceover: 'حطيه في شنطتك', spoken: 'حطيه في شَنطِتك' }, { voiceover: 'سطر اتغير', spoken: 'سطر قديم' }, { voiceover: 'سطر 3' }];
+  const { script } = userScript({ scenes }, 3);
+  assert.equal(script.scenes[0].spoken, 'حطيه في شَنطِتك');
+  assert.equal(script.scenes[1].spoken, undefined);
+  assert.match(scenePrompt(script.scenes[0], { style: 'STUDIO', voiceGender: 'FEMALE', aspectRatio: '9:16' }), /شَنطِتك/);
+});

@@ -125,6 +125,7 @@ export function userScript(input, clipCount, { sceneSeconds, pace } = {}) {
       visual: String(s?.visual || '').slice(0, 900) || GENERIC_VISUAL[last ? 2 : Math.min(i, 1)],
       motion: String(s?.motion || '').slice(0, 500),
       voiceover,
+      ...withSpoken(voiceover, s?.spoken), // dropped when the customer changed the line
     });
   }
   return { script: { product: readProduct(input.product), hook: out[0].voiceover, cta: out[out.length - 1].voiceover, scenes: out, source: 'USER_EDITED' } };
@@ -227,8 +228,16 @@ const PROOFREAD = [
   'Fix every line so that: it is correct, natural Egyptian as people really say it; every sentence is complete and makes sense; it uses only common everyday words that are easy to pronounce (replace rare, formal or hard words with simple ones); it sounds like a real person, not an ad and not an AI.',
   'Keep the meaning, the order and the facts. Never add a feature, number, brand, guarantee or price that is not already in the line. Prices and numbers stay written as Egyptian words.',
   'Keep each line at or under its word limit.',
-  'Reply with one JSON object only: {"lines": [string, ...]} with the same number of lines.',
+  'Then, for the voice only, write each corrected line again in "spoken" with Arabic diacritics (تشكيل) on the words a voice could read wrong (e.g. "شَنطِتك", "هيِوَفّر"); leave every other word and all letters exactly the same.',
+  'Reply with one JSON object only: {"lines": [string, ...], "spoken": [string, ...]} with the same number of lines in both.',
 ].join(' ');
+
+const plain = (t) => String(t || '').replace(/[\u064B-\u065F\u0670]/g, '').replace(/\s+/g, ' ').trim();
+/** The marked-up line for the voice, kept only when it is the very same line plus diacritics. */
+function withSpoken(voiceover, spoken) {
+  const marked = String(spoken || '').replace(/\s+/g, ' ').trim();
+  return marked && marked !== voiceover && plain(marked) === plain(voiceover) ? { spoken: marked } : {};
+}
 
 /** A second pass over the spoken lines: fixes mistakes and hard words. Falls back to the lines as they are. */
 async function proofread(scenes, limits, offer, imageDataUrl) {
@@ -240,9 +249,12 @@ async function proofread(scenes, limits, offer, imageDataUrl) {
   try {
     const key = env.openAiKey();
     const reply = key ? await askOpenAi(key, user, imageDataUrl, PROOFREAD) : await askFal(user, imageDataUrl, PROOFREAD, 0.2);
-    const lines = parseJsonObject(reply)?.lines;
+    const { lines, spoken } = parseJsonObject(reply) || {};
     if (!Array.isArray(lines) || lines.length !== scenes.length || lines.some((l) => !String(l || '').trim())) return scenes;
-    return scenes.map((s, i) => ({ ...s, voiceover: fitLine(String(lines[i]).replace(/\s+/g, ' '), limits[i]) }));
+    return scenes.map((s, i) => {
+      const voiceover = fitLine(String(lines[i]).replace(/\s+/g, ' '), limits[i]);
+      return { ...s, voiceover, ...withSpoken(voiceover, Array.isArray(spoken) ? spoken[i] : null) };
+    });
   } catch (err) {
     console.warn('[script] proofread failed, keeping the lines:', err.message);
     return scenes;
@@ -300,7 +312,7 @@ export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, w
     scene.motion || scene.visual,
     mode === 'voiceover'
       ? 'Nobody speaks in this clip: no dialogue and no lip movement; people only react naturally. Silent footage.'
-      : `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says ${speech}: "${speakNumbers(scene.voiceover)}"`,
+      : `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says ${speech}: "${speakNumbers(scene.spoken || scene.voiceover)}"`,
     mode === 'speech' ? (music === 'light' ? 'Light upbeat background music, quiet under the voice.' : 'No background music, only the voice and natural room sound.') : '',
     'The product must look exactly like the reference image for the whole clip: same shape, colors, logo, label and packaging. It does not morph, bend, melt or change; do not add or remove any part of the product.',
     product?.usage ? `It is used like this: ${product.usage}` : '',
