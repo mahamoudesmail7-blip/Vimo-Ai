@@ -48,6 +48,7 @@ function route() {
 const STYLE_OPTS = [
   ['AUTO', 'تلقائي', 'إحنا نختار أنسب شكل لمنتجك'],
   ['UGC', 'شخص بيتكلم', 'زي ريفيو حقيقي على تيك توك'],
+  ['STUDIO', 'استوديو', 'شخص قاعد في استوديو شيك وبيكلم الكاميرا'],
   ['SHOWCASE', 'عرض المنتج', 'لقطات قريبة للمنتج بتعليق صوتي'],
 ];
 
@@ -153,7 +154,7 @@ async function renderCreate(view) {
     box.innerHTML = `<span class="label">السكريبت <span class="muted" style="font-weight:400">(تقدر تعدّل الكلام)</span></span>
       ${f.script.scenes.map((sc, i) => `<div class="script-scene"><div class="hint">${names[i]} · ${fmt(f.script.sceneSeconds?.[i] || f.script.clipSeconds)} ثواني · <span data-count="${i}"></span></div><textarea data-scene="${i}" rows="2" style="min-height:64px">${esc(sc.voiceover)}</textarea></div>`).join('')}
       <button type="button" class="btn link" id="preview">اكتب سكريبت تاني</button>`;
-    const limit = (i) => Math.round((f.script.sceneSeconds?.[i] || f.script.clipSeconds) * (f.pace === 'normal' ? 2.4 : 3));
+    const limit = (i) => Math.round((f.script.sceneSeconds?.[i] || f.script.clipSeconds) * (f.pace === 'normal' ? 2.4 : 3.4));
     const count = (ta) => { const i = Number(ta.dataset.scene); const n = ta.value.trim().split(/\s+/).filter(Boolean).length; const el = $(`[data-count="${i}"]`, box); el.textContent = `${fmt(n)} كلمة`; el.style.color = n > limit(i) ? 'var(--warn)' : ''; };
     $$('textarea[data-scene]', box).forEach((ta) => { count(ta); ta.oninput = () => { f.script.scenes[Number(ta.dataset.scene)].voiceover = ta.value; count(ta); }; });
     $('#preview').onclick = preview;

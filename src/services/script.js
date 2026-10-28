@@ -14,13 +14,14 @@ const STYLE_DIRECTION = {
   AUTO: 'High-converting Egyptian social ad: a real Egyptian person using the product in a real home, mixed with sharp close-ups of the product details, natural light, filmed on a smartphone.',
   UGC: 'Authentic user-generated-content look: filmed on a smartphone, handheld, natural home lighting, a real Egyptian person talking to the camera like a TikTok review.',
   CINEMATIC: 'Premium cinematic product commercial: smooth slow camera moves, soft natural light, shallow depth of field, an elegant real Egyptian home or street setting.',
+  STUDIO: 'Polished talking-head ad in a modern content-creator studio: the speaker sits on a cream boucle armchair facing the camera, in front of a deep teal-green wall with warm glowing lamps, wooden shelves and green plants, soft warm key light on the face, shallow depth of field with creamy bokeh, shot on a cinema camera, holding or showing the product.',
   SHOWCASE: 'Clean product showcase: the product on a tidy real surface, close-up details, slow push-in shots, bright even lighting, a person only as hands or in the background.',
 };
 
 const NEGATIVE = 'product changes shape, product morphing, melting, warped or extra parts, different colors, changed or misspelled logo, distorted hands, extra fingers, cartoon, 3D render, CGI, plastic skin, on-screen text, subtitles, captions, watermark';
-export const MAX_VOICE_WORDS = 24; // ~8 seconds of fast, energetic Egyptian speech
-/** How many spoken words fit a scene: ~3 words/s fast, ~2.4 normal. */
-export const wordsFor = (seconds, pace = 'fast') => Math.max(8, Math.round(seconds * (pace === 'normal' ? 2.4 : 3)));
+export const MAX_VOICE_WORDS = 27; // ~8 seconds of fast, energetic Egyptian speech
+/** How many spoken words fit a scene: ~3.4 words/s fast, ~2.4 normal. */
+export const wordsFor = (seconds, pace = 'fast') => Math.max(8, Math.round(seconds * (pace === 'normal' ? 2.4 : 3.4)));
 const limitsOf = (clipCount, sceneSeconds, pace) => Array.from({ length: clipCount }, (_, i) => wordsFor(sceneSeconds?.[i] || env.clipSeconds(), pace));
 
 let fetchImpl = (...args) => fetch(...args);
@@ -113,7 +114,7 @@ const SYSTEM = [
 function scriptRequest({ productName, description, offer, style, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech' }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
   const secs = Array.from({ length: clipCount }, (_, i) => sceneSeconds?.[i] || env.clipSeconds());
-  const voiceover = mode === 'voiceover';
+  const voiceover = mode === 'voiceover' || mode === 'hybrid';
   const speaker = voiceGender === 'FEMALE' ? 'a young Egyptian woman (around 25-35)' : 'a young Egyptian man (around 25-35)';
   return [
     `Product name: ${productName}`,
@@ -128,7 +129,9 @@ function scriptRequest({ productName, description, offer, style, voiceGender, cl
     '- its exact look: shape, proportions, colors, materials, every visible part, logo and label text.',
     '',
     `STEP 2. Write a ${clipCount}-scene ad. Each scene is ONE clip; the scene lengths in seconds are: ${secs.join(', ')}.`,
-    '- Scene 1 is the hook: in the first 2 seconds hit a real pain, fear or desire of the buyer, or say something surprising. It must make an Egyptian stop scrolling.',
+    '- Scene 1 is the hook: in the first 2 seconds hit a real pain, fear or desire of the buyer, or say something surprising. It must make an Egyptian stop scrolling. A direct question to the viewer works best (e.g. "مين قالك إنك لازم...؟", "البرد موقف شغلك؟").',
+    '- It is ONE person in ONE place for the whole ad, talking straight to the camera like a real review, holding the product near their face or using it. Every scene\'s "visual" keeps the same person, outfit and place; only the framing changes (medium shot, close-up on the product in hand).',
+    '- The lines flow as one continuous talk across the scenes, like the person never stopped talking.',
     '- Middle scene(s): show the product being used correctly and give ONE concrete benefit with a feeling or a quick proof (a before/after moment, a reaction).',
     '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt).',
     '',
@@ -138,6 +141,8 @@ function scriptRequest({ productName, description, offer, style, voiceGender, cl
       : `- Egyptian colloquial, warm and natural, like a friend excitedly recommending it. Fast-paced TikTok energy, short punchy phrases, said quickly with no dead air. Word count per scene: ${limits.map((l, i) => `scene ${i + 1}: ${l - 6}-${l}`).join(', ')}.`,
     '- Specific to THIS product (use what you saw in the photo), no generic filler, do not repeat the product name in every line.',
     '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
+    '- Facts must be TRUE: only say features, numbers, brand names, materials or specs that are in the seller\'s description or clearly visible in the photo. Never invent power, sizes, guarantees, prices or delivery times. If unsure, describe the benefit in general words instead.',
+    '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud.',
     '',
     'Rules for "visual" (the first frame, in English, max 90 words). It becomes a real photo made from the product photo, so:',
     '- describe ONE photorealistic smartphone-camera frame: a real Egyptian setting, the speaker, framing, light;',
@@ -229,7 +234,7 @@ export function keyframePrompt(scene, { product, style, voiceGender, aspectRatio
 export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, withScene = false, mode = 'speech', music = 'none', pace = 'fast' }) {
   const speech = pace === 'normal'
     ? 'in Egyptian Arabic dialect, warm and clear at a natural pace, with matching lip movement, finishing the line before the clip ends'
-    : 'in Egyptian Arabic dialect, fast and energetic like a fast-paced TikTok ad, clearly, with no long pauses and matching lip movement, finishing the line before the clip ends';
+    : 'in Egyptian Arabic dialect, speaking quickly (a brisk, rapid delivery, never slow or drawn out) and energetic like a fast-paced TikTok ad, clearly, with no pauses and matching lip movement, finishing the line before the clip ends';
   return [
     STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC,
     `Camera: ${scene.camera || 'medium shot'}.`,

@@ -7,16 +7,19 @@
 // Modes:
 //   speech     clips made WITH sound; the speaker says the line on camera (lip-sync)
 //   voiceover  silent clips (cheaper) + one TTS voiceover laid over the joined video
+//   hybrid     ONE silent AI clip + the product's real photos with camera moves,
+//              joined on our server (free) under the voiceover: the cheapest
 import { env } from '../config.js';
 import { MODELS } from './catalog.js';
 import { effectiveModel, mockAllowed } from './settings.js';
 import { adapters } from './providers/index.js';
+import { ffmpegPath } from './compose.js';
 
 export const TARGET_SECONDS = 24;
 const SCRIPT_USD = 0.01; // one vision-LLM call for the script
 const CHARS_PER_WORD = 6;
 
-export const wordsPerSecond = (pace) => (pace === 'normal' ? 2.4 : 3);
+export const wordsPerSecond = (pace) => (pace === 'normal' ? 2.4 : 3.4);
 
 /** Models the engine may use right now: enabled by the admin, with credentials set. */
 export function availableModels(settings) {
@@ -51,43 +54,60 @@ const cheapest = (models, kind, costOf) => models.filter((m) => m.kind === kind)
 // UGC is a person talking on camera: while any model in the tier can make
 // speech, a cheaper silent model must not turn it into a voiceover.
 function modesFor(style, model, tierHasSpeech) {
-  if (style === 'SHOWCASE') return ['voiceover'];
-  if (style === 'AUTO') return model.audio ? ['speech', 'voiceover'] : ['voiceover'];
+  if (style === 'SHOWCASE') return ['voiceover', 'hybrid'];
+  if (style === 'AUTO') return model.audio ? ['speech', 'voiceover', 'hybrid'] : ['voiceover', 'hybrid'];
   if (tierHasSpeech) return model.audio ? ['speech'] : []; // UGC (and older CINEMATIC jobs)
   return ['voiceover'];
 }
 
 /**
+ * Hybrid: the shortest AI clip the model makes (at least 4s, it is paid per
+ * second), then photo scenes of at most 8s each for the rest.
+ */
+export function hybridSeconds(durations, target = TARGET_SECONDS) {
+  const fit = durations.filter((d) => d >= 4);
+  const clip = fit.length ? Math.min(...fit) : Math.max(...durations);
+  const rest = Math.max(4, target - clip);
+  const n = Math.ceil(rest / 8);
+  const each = Math.floor(rest / n);
+  return [clip, ...Array.from({ length: n }, (_, i) => each + (i < rest - each * n ? 1 : 0))];
+}
+
+/**
  * @returns {{ plan }|{ error }} error is for the admin log; the customer gets a generic message.
  */
-export function planVideo({ style = 'AUTO', pace = 'fast', settings, preferReferences = env.videoMode() === 'ingredients', target = TARGET_SECONDS }) {
+export function planVideo({ style = 'AUTO', pace = 'fast', settings, preferReferences = env.videoMode() === 'ingredients', target = settings.targetSeconds || TARGET_SECONDS }) {
   const models = availableModels(settings);
   const tier = settings.tier;
   const videos = models.filter((m) => m.kind === 'video' && m.tier === tier);
   if (!videos.length) return { error: `مفيش موديل فيديو شغال في فئة ${tier}.` };
 
-  const image = env.keyframeModel() ? cheapest(models, 'image', (m) => m.usdPerUnit) : null;
+  // First-frame models are matched to the tier (Pro for standard/premium), else the cheapest.
+  const tierImages = models.filter((m) => m.kind === 'image' && (!m.tiers || m.tiers.includes(tier)));
+  const image = !env.keyframeModel() ? null : cheapest(tierImages.length ? tierImages : models, 'image', (m) => m.usdPerUnit);
   const tts = cheapest(models, 'tts', (m) => m.usdPer1kChars);
   const merge = cheapest(models, 'merge', (m) => m.usdPerSecond.silent);
   const mux = cheapest(models, 'mux', (m) => m.usdPerSecond.silent);
 
   const options = [];
   const tierHasSpeech = videos.some((v) => v.audio);
+  const hybridOn = settings.hybrid !== false && Boolean(ffmpegPath());
   for (const video of videos) {
-    const secs = sceneSeconds(video.durations, target);
-    const total = secs.reduce((a, b) => a + b, 0);
     for (const mode of modesFor(style, video, tierHasSpeech)) {
+      const hybrid = mode === 'hybrid';
+      if (hybrid && (!hybridOn || !tts)) continue;
+      const secs = hybrid ? hybridSeconds(video.durations, target) : sceneSeconds(video.durations, target);
+      const total = secs.reduce((a, b) => a + b, 0);
+      const aiSeconds = hybrid ? secs[0] : total;
       if (mode === 'voiceover' && (!tts || !mux)) continue;
-      if (secs.length > 1 && !merge) continue;
+      if (!hybrid && secs.length > 1 && !merge) continue;
       const lines = [];
       const add = (step, m, usd) => m && lines.push({ step, provider: m.provider, model: m.id, usd: Math.round(usd * 10000) / 10000 });
-      add('video', video, total * (mode === 'speech' ? video.usdPerSecond.audio : video.usdPerSecond.silent));
-      add('image', image, secs.length * (image?.usdPerUnit || 0));
-      if (mode === 'voiceover') {
-        add('tts', tts, (total * wordsPerSecond(pace) * CHARS_PER_WORD / 1000) * tts.usdPer1kChars);
-        add('mux', mux, total * mux.usdPerSecond.silent);
-      }
-      if (secs.length > 1) add('merge', merge, total * merge.usdPerSecond.silent);
+      add('video', video, aiSeconds * (mode === 'speech' ? video.usdPerSecond.audio : video.usdPerSecond.silent));
+      add('image', image, (hybrid ? 1 : secs.length) * (image?.usdPerUnit || 0));
+      if (mode !== 'speech') add('tts', tts, (total * wordsPerSecond(pace) * CHARS_PER_WORD / 1000) * tts.usdPer1kChars);
+      if (mode === 'voiceover') add('mux', mux, total * mux.usdPerSecond.silent);
+      if (!hybrid && secs.length > 1) add('merge', merge, total * merge.usdPerSecond.silent);
       const scriptProvider = env.openAiKey() ? null : models.some((m) => m.provider === 'fal') ? 'fal' : null;
       if (scriptProvider) lines.push({ step: 'script', provider: 'fal', model: 'fal:llm', usd: SCRIPT_USD });
       const byProvider = {};
@@ -95,9 +115,9 @@ export function planVideo({ style = 'AUTO', pace = 'fast', settings, preferRefer
       const totalUsd = Math.round(lines.reduce((a, l) => a + l.usd, 0) * 10000) / 10000;
       options.push({
         tier, mode, provider: video.provider, sceneSeconds: secs, seconds: total, pace,
-        models: { video: video.id, image: image?.id || null, tts: mode === 'voiceover' ? tts.id : null, merge: secs.length > 1 ? merge.id : null, mux: mode === 'voiceover' ? mux.id : null },
+        models: { video: video.id, image: image?.id || null, tts: mode !== 'speech' ? tts.id : null, merge: !hybrid && secs.length > 1 ? merge.id : null, mux: mode === 'voiceover' ? mux.id : null },
         estimate: { totalUsd, byProvider, lines },
-        _rank: [totalUsd, settings.providers[video.provider].priority, (video.input === 'references') === preferReferences ? 0 : 1, mode === 'speech' ? 0 : 1, MODELS.findIndex((m) => m.id === video.id)],
+        _rank: [totalUsd, settings.providers[video.provider].priority, (video.input === 'references') === preferReferences ? 0 : 1, mode === 'speech' ? 0 : mode === 'voiceover' ? 1 : 2, MODELS.findIndex((m) => m.id === video.id)],
       });
     }
   }

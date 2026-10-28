@@ -29,7 +29,8 @@ export const MODELS = [
   { id: 'google:veo31', provider: 'google', kind: 'video', label: 'Veo 3.1', endpoint: 'veo-3.1-generate-001', tier: 'premium', input: 'frame', durations: [4, 6, 8], audio: true, negativePrompt: true, usdPerSecond: { audio: 0.40, silent: 0.20 }, priceVerified: true },
 
   // --- support steps on fal
-  { id: 'fal:nano-banana-pro', provider: 'fal', kind: 'image', label: 'Nano Banana Pro (أول فريم)', endpoint: 'fal-ai/nano-banana-pro/edit', usdPerUnit: 0.15, priceVerified: true },
+  { id: 'fal:nano-banana-pro', provider: 'fal', kind: 'image', label: 'Nano Banana Pro (أول فريم)', endpoint: 'fal-ai/nano-banana-pro/edit', tiers: ['standard', 'premium'], usdPerUnit: 0.15, priceVerified: true },
+  { id: 'fal:nano-banana', provider: 'fal', kind: 'image', label: 'Nano Banana (أول فريم، أرخص)', endpoint: 'fal-ai/nano-banana/edit', tiers: ['economy'], usdPerUnit: 0.0398, priceVerified: true },
   { id: 'fal:eleven-v3', provider: 'fal', kind: 'tts', label: 'ElevenLabs v3 (تعليق صوتي)', endpoint: 'fal-ai/elevenlabs/tts/eleven-v3', usdPer1kChars: 0.10, priceVerified: true },
   { id: 'fal:merge-videos', provider: 'fal', kind: 'merge', label: 'دمج المقاطع', endpoint: 'fal-ai/ffmpeg-api/merge-videos', usdPerSecond: { silent: 0.0002 }, priceVerified: false },
   { id: 'fal:merge-audio-video', provider: 'fal', kind: 'mux', label: 'تركيب الصوت', endpoint: 'fal-ai/ffmpeg-api/merge-audio-video', usdPerSecond: { silent: 0.0002 }, priceVerified: true },

@@ -37,10 +37,15 @@ async function fakeFetch(url, opts = {}) {
     if (sub.model.includes('elevenlabs')) return json(200, { audio: { url: `https://cdn.fake/${rs[1]}.mp3` } });
     return json(200, { video: { url: `https://cdn.fake/${rs[1]}.mp4` } });
   }
-  if (url.startsWith('https://cdn.fake/')) return new Response(Buffer.from('FAKE-MP4-BYTES-0123456789'), { status: 200 });
+  if (url.startsWith('https://cdn.fake/')) {
+    if (fake.realMedia) return new Response(url.endsWith('.jpg') ? Buffer.from(PNG_REAL.split(',')[1], 'base64') : (await import('../src/engine/media.js')).mockVideo(), { status: 200 });
+    return new Response(Buffer.from('FAKE-MP4-BYTES-0123456789'), { status: 200 });
+  }
   throw new Error(`unexpected fetch ${url}`);
 }
 
+// A real image for the hybrid render (ffmpeg needs to decode it)
+const PNG_REAL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAABAAAAAQBPJcTWAAAAeUlEQVR4nO3PwQkAIBDAsBvCSV3er0P4CEKhA6Rz9vq64YIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALHrsMNtFaUQqPygAAAABJRU5ErkJggg==';
 const PNG = 'data:image/png;base64,' + Buffer.from('\x89PNG\r\n\x1a\nfake').toString('base64');
 
 function client() {
@@ -75,7 +80,7 @@ before(async () => {
   server = createApp().listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
   // The real-provider path: the free mock engine is off, fal is the engine.
-  await (await import('../src/engine/settings.js')).saveSettings({ tier: 'standard', perVideoMaxUsd: 5, perDayMaxUsd: 50, providers: { mock: { enabled: false } } });
+  await (await import('../src/engine/settings.js')).saveSettings({ tier: 'standard', perVideoMaxUsd: 5, perDayMaxUsd: 50, hybrid: false, providers: { mock: { enabled: false } } });
 });
 after(async () => { server?.close(); await prisma?.$disconnect(); });
 
@@ -115,10 +120,11 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   assert.equal(ok.status, 'COMPLETED', ok.error);
   const frameSubs = fake.submitted.filter((s) => s.model.includes('nano-banana'));
   assert.equal(frameSubs.length, 3, 'a first frame per scene');
+  assert.ok(frameSubs.slice(1).every((s) => s.body.image_urls.length === frameSubs[0].body.image_urls.length + 1 && s.body.prompt.includes('LAST reference image')), 'scenes 2+ keep the person and place of scene 1');
   assert.ok(frameSubs.every((s) => s.model === 'fal-ai/nano-banana-pro/edit' && s.body.image_urls[0].startsWith('data:image/png') && s.body.aspect_ratio === '9:16'));
   const clipSubs = fake.submitted.filter((s) => s.body.image_url);
   assert.equal(clipSubs.length, 3, 'three clips');
-  assert.ok(clipSubs.every((s) => /^https:\/\/cdn\.fake\/req\d+\.jpg$/.test(s.body.image_url) && s.body.duration === '8s'), 'each clip starts from its first frame');
+  assert.ok(clipSubs.every((s) => /^https:\/\/cdn\.fake\/req\d+\.jpg$/.test(s.body.image_url) && ['8s', '6s', '6s'].includes(s.body.duration)), 'each clip starts from its first frame');
   assert.ok(clipSubs.every((s) => s.model === 'fal-ai/veo3.1/fast/image-to-video' && s.body.negative_prompt));
   assert.equal(fake.mergeInputs.at(-1).length, 3, 'merged three clips');
 
@@ -126,7 +132,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   assert.equal(r.status, 206);
   assert.equal(r.data.toString(), 'FAKE');
   r = await user('GET', `/api/videos/${ok.id}`);
-  assert.equal(r.data.seconds, 24);
+  assert.equal(r.data.seconds, 20);
   assert.equal(r.data.script.scenes.length, 3);
 
   // another user cannot see it
@@ -143,7 +149,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   fake.failClips = false;
   assert.equal(bad.status, 'FAILED');
   assert.match(bad.error, /content policy/);
-  assert.ok(JSON.parse(bad.clips_json).every((c) => c.frame.status === 'SKIPPED'), 'a failed first frame does not fail the video by itself');
+  assert.equal(JSON.parse(bad.clips_json)[0].frame.status, 'SKIPPED', 'a failed first frame does not fail the video by itself');
   assert.ok(bad.refunded);
   r = await user('GET', '/api/auth/me');
   assert.equal(r.data.user.credits, 2, '3 - 1 used - 1 spent then refunded');
@@ -206,6 +212,8 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
 
   // Ingredients mode (like Google Flow): each clip is made from the first frame + the product photo as references
   process.env.VIMO_VIDEO_MODE = 'ingredients';
+  const { saveSettings: save } = await import('../src/engine/settings.js');
+  await save({ targetSeconds: 24 }); // the reference model only makes 8s clips
   try {
     await admin('POST', `/api/admin/users/${(await user('GET', '/api/auth/me')).data.user.id}/credits`, { delta: 1, note: 'test' });
     const start = fake.submitted.length;
@@ -219,6 +227,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
     assert.ok(refSubs.every((x) => x.body.prompt.includes('Scene: ')), 'the scene is described when there is no first frame to animate');
   } finally {
     delete process.env.VIMO_VIDEO_MODE;
+    await save({ targetSeconds: 20 });
   }
 });
 
@@ -243,7 +252,7 @@ test('engine: voiceover mode, idempotent orders, spending limits, balance gate, 
   assert.equal(JSON.stringify(r.data).includes('test-key'), false, 'no key reaches the browser');
 
   r = await user('GET', '/api/videos/quote');
-  assert.deepEqual({ c: r.data.credits, s: r.data.seconds, a: r.data.available }, { c: 1, s: 24, a: true });
+  assert.deepEqual({ c: r.data.credits, s: r.data.seconds, a: r.data.available }, { c: 1, s: 20, a: true });
   assert.equal(JSON.stringify(r.data).match(/fal|veo|usd/i), null, 'the customer sees no provider or dollar');
 
   // AUTO = silent clips + one Egyptian voiceover laid over the joined video, two product photos as references
@@ -260,7 +269,7 @@ test('engine: voiceover mode, idempotent orders, spending limits, balance gate, 
   const clips = subs.filter((x) => x.model === 'fal-ai/veo3.1/fast/image-to-video');
   assert.equal(clips.length, 3);
   assert.ok(clips.every((x) => x.body.generate_audio === false && /Nobody speaks/.test(x.body.prompt)));
-  assert.ok(subs.filter((x) => x.model.includes('nano-banana')).every((x) => x.body.image_urls.length === 2), 'every photo is a reference for the first frame');
+  assert.deepEqual(subs.filter((x) => x.model.includes('nano-banana')).map((x) => x.body.image_urls.length), [2, 3, 3], 'every photo is a reference for the first frame, plus scene 1 for the others');
   const tts = subs.find((x) => x.model === 'fal-ai/elevenlabs/tts/eleven-v3');
   assert.ok(tts && tts.body.language_code === 'ar' && tts.body.text.length > 20);
   const mux = subs.find((x) => x.model === 'fal-ai/ffmpeg-api/merge-audio-video');
@@ -328,4 +337,40 @@ test('engine: voiceover mode, idempotent orders, spending limits, balance gate, 
   assert.equal(r.status, 200);
   assert.ok(r.data.length > 1000, 'a real (tiny) mp4 to play in the browser');
   assert.equal(await credits(), 7);
+});
+
+test('hybrid: one AI clip + the real product photos under the voiceover, ~$0.21 a video', { skip }, async () => {
+  const { saveSettings } = await import('../src/engine/settings.js');
+  await saveSettings({ tier: 'economy', perVideoMaxUsd: 0.5, hybrid: true });
+  fake.realMedia = true;
+  try {
+    const user = client();
+    const admin = client();
+    await admin('POST', '/api/auth/login', { email: 'boss@test.dev', password: 'secret123' });
+    let r = await user('POST', '/api/auth/signup', { name: 'Salma', email: 'salma@test.dev', password: 'secret123' });
+    await admin('POST', `/api/admin/users/${r.data.user.id}/credits`, { delta: 1 });
+    r = await admin('GET', '/api/admin/engines');
+    assert.equal(r.data.plans.AUTO.mode, 'hybrid');
+    assert.ok(r.data.plans.AUTO.estimate.totalUsd <= 0.5, `$${r.data.plans.AUTO.estimate.totalUsd}`);
+
+    const start = fake.submitted.length;
+    r = await user('POST', '/api/videos', { description: 'زجاجة مياه حرارية ستانلس', images: [PNG_REAL, PNG_REAL] });
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    const job = await settle(r.data.id, 30);
+    assert.equal(job.status, 'COMPLETED', job.error);
+    const subs = fake.submitted.slice(start);
+    const clips = subs.filter((x) => x.model.startsWith('fal-ai/veo3.1/lite'));
+    assert.equal(clips.length, 1, 'only one paid AI clip');
+    assert.equal(clips[0].body.generate_audio, false);
+    assert.equal(subs.filter((x) => x.model === 'fal-ai/nano-banana/edit').length, 1, 'one cheap first frame');
+    assert.equal(subs.filter((x) => x.model.includes('merge')).length, 0, 'joined on our server, not on fal');
+    assert.ok(subs.some((x) => x.model.includes('elevenlabs')));
+    assert.ok(job.cost_actual_usd <= 0.25 && job.cost_actual_usd > 0.15, `actual $${job.cost_actual_usd}`);
+    r = await user('GET', `/api/videos/${job.id}/video`);
+    assert.equal(r.status, 200);
+    assert.ok(r.data.length > 20000, 'a real 24s mp4');
+  } finally {
+    fake.realMedia = false;
+    await saveSettings({ tier: 'standard', perVideoMaxUsd: 5, hybrid: false });
+  }
 });

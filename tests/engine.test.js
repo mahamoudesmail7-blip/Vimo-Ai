@@ -11,13 +11,15 @@ import google from '../src/engine/providers/google.js';
 import { findModel } from '../src/engine/catalog.js';
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-const only = (on) => { const s = defaults(); for (const p of Object.keys(s.providers)) s.providers[p].enabled = on.includes(p); return s; };
+const only = (on, { hybrid = false } = {}) => { const s = defaults(); s.hybrid = hybrid; for (const p of Object.keys(s.providers)) s.providers[p].enabled = on.includes(p); return s; };
 
 test('scene lengths reach ~24s with each model\'s clip durations', () => {
   assert.deepEqual(sceneSeconds([4, 6, 8]), [8, 8, 8]);
   assert.deepEqual(sceneSeconds([8]), [8, 8, 8]);
   assert.deepEqual(sceneSeconds([5, 10]), [10, 10, 5]);
   assert.deepEqual(sceneSeconds([6, 10]), [6, 6, 6, 6]);
+  assert.deepEqual(sceneSeconds([4, 6, 8], 20), [8, 6, 6]);
+  assert.equal(defaults().targetSeconds, 20);
 });
 
 test('a fresh install is on the cheapest tier with a $2 per-video cap', () => {
@@ -27,6 +29,22 @@ test('a fresh install is on the cheapest tier with a $2 per-video cap', () => {
   const { plan } = planVideo({ style: 'UGC', settings: s });
   assert.equal(plan.models.video, 'fal:veo31-lite');
   assert.ok(plan.estimate.totalUsd <= s.perVideoMaxUsd, `$${plan.estimate.totalUsd} fits the $2 cap`);
+});
+
+test('hybrid (on by default): one AI clip + photo scenes, under $0.5 on the economy tier', async () => {
+  process.env.FAL_KEY = 'k';
+  const { hybridSeconds } = await import('../src/engine/planner.js');
+  assert.deepEqual(hybridSeconds([4, 6, 8]), [4, 7, 7, 6]);
+  assert.deepEqual(hybridSeconds([5, 10]), [5, 7, 6, 6]);
+  assert.deepEqual(hybridSeconds([8]), [8, 8, 8]);
+  const s = only(['fal'], { hybrid: true });
+  assert.equal(defaults().hybrid, true);
+  const { plan } = planVideo({ style: 'AUTO', settings: s });
+  assert.equal(plan.mode, 'hybrid');
+  assert.ok(plan.estimate.totalUsd < 0.25, `$${plan.estimate.totalUsd}`);
+  assert.equal(plan.models.image, 'fal:nano-banana', 'the cheaper first-frame model');
+  assert.deepEqual(plan.estimate.lines.map((l) => l.step).sort(), ['image', 'script', 'tts', 'video']);
+  assert.equal(planVideo({ style: 'UGC', settings: s }).plan.mode, 'speech', 'UGC is never a slideshow');
 });
 
 test('the planner picks the cheapest compatible model in the tier, and never another tier', () => {
@@ -61,7 +79,7 @@ test('silent-only engines make UGC with a voiceover; admin price overrides chang
     s.models['fal:veo31-lite'] = { usdPerSecond: { silent: 0.08 } };
     ({ plan } = planVideo({ style: 'AUTO', settings: s }));
     assert.equal(plan.models.video, 'higgsfield:kling25-std');
-    assert.deepEqual(plan.sceneSeconds, [10, 10, 5]);
+    assert.deepEqual(plan.sceneSeconds, [10, 5, 5], '20s default length');
     assert.equal(plan.provider, 'higgsfield');
     assert.ok(plan.estimate.byProvider.fal > 0, 'frames, voice and merge still run on fal');
     ({ plan } = planVideo({ style: 'UGC', settings: s }));
@@ -137,4 +155,17 @@ test('Google Vertex Veo: service-account token, predictLongRunning, video bytes 
     setFetch(null);
     delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   }
+});
+
+test('captions: two short lines per cue inside each scene, offer badge on the last scene', async () => {
+  const { captionCues, toAss } = await import('../src/engine/captions.js');
+  const scenes = [{ voiceover: 'واحد اتنين تلاتة أربعة خمسة ستة سبعة' }, { voiceover: 'اطلبه دلوقتي' }];
+  const c = captionCues({ scenes, sceneSeconds: [8, 6], mode: 'speech', offer: '500 جنيه بدل 1000' });
+  assert.deepEqual(c.cues.map((x) => [x.top, x.bottom]), [['واحد اتنين تلاتة', 'أربعة خمسة ستة'], ['سبعة', null], ['اطلبه دلوقتي', null]]);
+  assert.ok(c.cues[1].end <= 8 && c.cues[2].start >= 8, 'a line stays inside its own clip');
+  assert.deepEqual(c.badge, { text: '500 جنيه بدل 1000', start: 8, end: 14 });
+  const ass = toAss(c, '9:16');
+  assert.match(ass, /PlayResY: 1280/);
+  assert.equal((ass.match(/^Dialogue:/gm) || []).length, 5);
+  assert.deepEqual(c.punches, [[4, 8], [11, 14]], 'a punch-in halfway through each talking scene');
 });

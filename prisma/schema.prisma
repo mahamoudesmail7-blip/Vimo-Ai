@@ -88,7 +88,7 @@ model VideoJob {
   description  String?
   offer        String? // price / discount line the CTA says
   voice_gender String  @default("MALE") // MALE | FEMALE
-  style        String  @default("UGC") // AUTO | UGC | SHOWCASE (CINEMATIC on older videos)
+  style        String  @default("UGC") // AUTO | UGC | STUDIO | SHOWCASE (CINEMATIC on older videos)
   aspect_ratio String  @default("9:16") // 9:16 | 16:9
   clip_count   Int     @default(3)
   clip_seconds Int     @default(8)

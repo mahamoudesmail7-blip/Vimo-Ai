@@ -5,7 +5,8 @@
 //   QUEUED -> SCRIPTING -> GENERATING (per scene, in parallel: a realistic
 //          first frame with the exact product, then the clip from that frame;
 //          plus the voiceover in voiceover mode)
-//          -> MERGING (join the clips) -> MIXING (voiceover mode: lay the
+//          -> MERGING (join the clips) | COMPOSING (hybrid: AI clip + photo
+//          scenes joined on our server) -> MIXING (voiceover mode: lay the
 //          voice over the video) -> STORING (copy to our storage) -> COMPLETED
 //
 // The plan (provider, models, scene lengths) is fixed at order time. Each tick
@@ -23,13 +24,15 @@ import { modelByEndpoint } from '../engine/catalog.js';
 import { recordEvent } from '../engine/budget.js';
 import { EngineError, isTransient } from '../engine/errors.js';
 import { toBuffer } from '../engine/media.js';
+import { composeHybrid, ffmpegPath } from '../engine/compose.js';
+import { captionCues, toAss, burnCaptions } from '../engine/captions.js';
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
 const MAX_CLIP_ATTEMPTS = 2;
 const MAX_IMAGES = 4;
 const SERVICE_PAUSED = 'الخدمة متوقفة مؤقتًا من عندنا، والرصيد رجعلك. جرب تاني كمان شوية.';
 const UNAVAILABLE = 'إنشاء الفيديو مش متاح دلوقتي. جرب تاني كمان شوية أو كلم الدعم.';
-const STYLES = ['AUTO', 'UGC', 'SHOWCASE', 'CINEMATIC'];
+const STYLES = ['AUTO', 'UGC', 'STUDIO', 'SHOWCASE', 'CINEMATIC'];
 const RATIOS = ['9:16', '16:9'];
 
 const running = new Set();
@@ -277,6 +280,7 @@ async function advance(job) {
     case 'GENERATING': return pollClips(job);
     case 'MERGING': return pollMerge(job);
     case 'MIXING': return pollMix(job);
+    case 'COMPOSING': return composeJob(job);
     case 'STORING': return storeVideo(job);
     default: return undefined;
   }
@@ -310,9 +314,11 @@ async function startJob(job) {
   }
   const videoModel = plan.models.video;
   const withScene = /ref/.test(videoModel);
-  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product, withScene, mode: plan.mode, music: options.music, pace: options.pace };
+  const hybrid = plan.mode === 'hybrid';
+  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product, withScene, mode: hybrid ? 'voiceover' : plan.mode, music: options.music, pace: options.pace };
   const withFrames = Boolean(plan.models.image);
-  const clips = script.scenes.map((scene, index) => ({
+  // Hybrid: only the first scene is an AI clip; the others are photo scenes rendered at the end.
+  const clips = script.scenes.map((scene, index) => (hybrid && index > 0 ? { key: `photo${index}`, index, kind: 'photo', seconds: plan.sceneSeconds[index], status: 'COMPLETED' } : {
     key: `clip${index}`,
     index,
     seconds: plan.sceneSeconds[index] || plan.sceneSeconds[0],
@@ -321,7 +327,7 @@ async function startJob(job) {
     status: withFrames ? 'WAITING_FRAME' : 'PENDING',
     attempts: 0,
   }));
-  const audio = plan.mode === 'voiceover'
+  const audio = plan.mode !== 'speech'
     ? { tts: { key: 'tts', text: script.scenes.map((s) => s.voiceover).join(' ... '), status: 'PENDING', attempts: 0 } }
     : null;
   job = await save(job, { script_json: JSON.stringify(script), clips_json: JSON.stringify(clips), audio_json: audio ? JSON.stringify(audio) : null, status: 'GENERATING', progress: 10 });
@@ -349,6 +355,8 @@ async function settle(job, step, label) {
   }
 }
 
+const CONTINUITY = 'The LAST reference image is the first frame of this same video: keep the very same person (face, hair, age, outfit) and the very same place and lighting, only the shot changes. The other reference images show the product.';
+
 async function submitClip(job, plan, clip, images) {
   const refs = [clip.frame?.url, ...images].filter(Boolean);
   await submitStep(job, clip, plan.models.video, 'video', {
@@ -359,10 +367,16 @@ async function submitClip(job, plan, clip, images) {
 
 // The first frame of a scene. If the image model fails twice, the clip starts
 // from the plain product photo instead of failing the whole video.
-async function advanceFrame(job, plan, clip, images) {
+// Scenes after the first wait for scene 1's frame and use it as a reference,
+// so the whole ad keeps one person, one outfit and one place.
+async function advanceFrame(job, plan, clip, images, clips = []) {
   const frame = clip.frame;
   if (frame.status === 'PENDING' || frame.status === 'RETRY') {
-    await submitStep(job, frame, plan.models.image, 'image', { prompt: frame.prompt, imageUrls: images, aspectRatio: job.aspect_ratio });
+    const first = clip.index > 0 ? clips.find((c) => c.index === 0)?.frame : null;
+    if (first && !['COMPLETED', 'SKIPPED', 'FAILED'].includes(first.status)) return;
+    const anchor = first?.status === 'COMPLETED' && first.url ? first.url : null;
+    const prompt = anchor ? `${frame.prompt} ${CONTINUITY}` : frame.prompt;
+    await submitStep(job, frame, plan.models.image, 'image', { prompt, imageUrls: anchor ? [...images, anchor] : images, aspectRatio: job.aspect_ratio });
     return;
   }
   const st = await settle(job, frame, `أول فريم للمشهد ${clip.index + 1}`);
@@ -386,7 +400,7 @@ async function pollClips(job, images = null) {
       legacyStep(clip.frame, plan.models.image);
       if (clip.status === 'COMPLETED') continue;
       if (clip.status === 'WAITING_FRAME') {
-        await advanceFrame(job, plan, clip, await loadImages());
+        await advanceFrame(job, plan, clip, await loadImages(), clips);
         if (clip.status !== 'PENDING') continue;
       }
       if (clip.status === 'PENDING' || clip.status === 'RETRY') {
@@ -412,6 +426,10 @@ async function pollClips(job, images = null) {
 
   if (!clips.length || !clips.every((c) => c.status === 'COMPLETED')) return undefined;
   if (audio?.tts && audio.tts.status !== 'COMPLETED') return undefined;
+  if (plan.mode === 'hybrid') {
+    job = await save(job, { status: 'COMPOSING', progress: 85 });
+    return composeJob(job);
+  }
   if (clips.length === 1) return afterMerge(job, plan, clips[0].url);
 
   const merge = { key: 'merge' };
@@ -466,6 +484,39 @@ async function storeVideo(job) {
     const blob = await prisma.blob.findUnique({ where: { key: ref.slice(5) }, select: { bytes: true } });
     return save(job, { status: 'COMPLETED', progress: 100, video_key: ref.slice(5), video_bytes: blob?.bytes || null, finished_at: new Date(), error: null });
   }
-  const stored = await putBuffer(await toBuffer(ref), 'video/mp4', 'videos');
+  const stored = await putBuffer(await withCaptions(job, await toBuffer(ref)), 'video/mp4', 'videos');
+  return save(job, { status: 'COMPLETED', progress: 100, video_key: stored.key, video_bytes: stored.bytes, finished_at: new Date(), error: null });
+}
+
+// The spoken line on screen (and the offer badge). Free, done here; if it
+// fails the video is kept without captions rather than failing the order.
+async function withCaptions(job, buffer) {
+  try {
+    if ((await loadSettings()).captions === false || !ffmpegPath()) return buffer;
+    const plan = planOf(job);
+    const scenes = parse(job.script_json)?.scenes;
+    if (!scenes?.length) return buffer;
+    const cues = captionCues({ scenes, sceneSeconds: plan.sceneSeconds, mode: plan.mode, offer: job.offer });
+    return await burnCaptions(buffer, toAss(cues, job.aspect_ratio), { punches: cues.punches, aspectRatio: job.aspect_ratio });
+  } catch (err) {
+    console.warn(`[worker] job ${job.id}: captions skipped:`, err.message);
+    return buffer;
+  }
+}
+
+// Hybrid: the AI clip, then the real product photos (and the AI first frame)
+// with camera moves, under the voiceover. Rendered here, so it costs nothing.
+async function composeJob(job) {
+  const clips = parse(job.clips_json) || [];
+  const audio = parse(job.audio_json);
+  const ai = clips.find((c) => c.kind !== 'photo');
+  if (!ai?.url) return fail(job, 'المشهد الأساسي ناقص.');
+  const photos = [...await productImages(job), ...(ai.frame?.status === 'COMPLETED' && ai.frame.url ? [ai.frame.url] : [])];
+  const buffer = await composeHybrid({
+    clipUrl: ai.url, clipSeconds: ai.seconds, photos,
+    photoSeconds: clips.filter((c) => c.kind === 'photo').map((c) => c.seconds),
+    audioUrl: audio?.tts?.url || null, aspectRatio: job.aspect_ratio,
+  });
+  const stored = await putBuffer(await withCaptions(job, buffer), 'video/mp4', 'videos');
   return save(job, { status: 'COMPLETED', progress: 100, video_key: stored.key, video_bytes: stored.bytes, finished_at: new Date(), error: null });
 }

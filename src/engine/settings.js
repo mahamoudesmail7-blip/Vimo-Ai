@@ -18,6 +18,9 @@ export function defaults() {
     tier: 'economy', // the quality tier every new video uses
     perVideoMaxUsd: 2,
     perDayMaxUsd: 20,
+    targetSeconds: 20, // ad length; the talking clips are paid per second, so shorter is cheaper
+    captions: true, // burn the spoken line on screen (free, our ffmpeg)
+    hybrid: true, // allow the one-AI-clip + product-photo production (cheapest)
     providers: {
       fal: { enabled: true, priority: 1, dailyMaxUsd: 50, confirmedBalanceUsd: null, confirmedAt: null },
       higgsfield: { enabled: true, priority: 2, dailyMaxUsd: 30, confirmedBalanceUsd: null, confirmedAt: null },
@@ -40,7 +43,7 @@ export async function loadSettings() {
   const d = defaults();
   const value = {
     ...d,
-    ...pick(stored, ['tier', 'perVideoMaxUsd', 'perDayMaxUsd']),
+    ...pick(stored, ['tier', 'perVideoMaxUsd', 'perDayMaxUsd', 'hybrid', 'targetSeconds', 'captions']),
     providers: Object.fromEntries(PROVIDERS.map((p) => [p, { ...d.providers[p], ...(stored.providers?.[p] || {}) }])),
     models: stored.models || {},
   };
@@ -57,6 +60,9 @@ export async function saveSettings(patch) {
   const cur = await loadSettings();
   const next = structuredClone(cur);
   if (TIERS.includes(patch.tier)) next.tier = patch.tier;
+  if (typeof patch.hybrid === 'boolean') next.hybrid = patch.hybrid;
+  if (typeof patch.captions === 'boolean') next.captions = patch.captions;
+  if (Number.isInteger(Number(patch.targetSeconds)) && Number(patch.targetSeconds) >= 12 && Number(patch.targetSeconds) <= 30) next.targetSeconds = Number(patch.targetSeconds);
   for (const k of ['perVideoMaxUsd', 'perDayMaxUsd']) if (money(patch[k]) !== undefined) next[k] = money(patch[k]);
   for (const p of PROVIDERS) {
     const src = patch.providers?.[p];

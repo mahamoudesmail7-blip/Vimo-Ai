@@ -40,12 +40,12 @@ async function overview() {
     });
   }
   const plans = {};
-  for (const style of ['AUTO', 'UGC', 'SHOWCASE']) {
+  for (const style of ['AUTO', 'UGC', 'STUDIO', 'SHOWCASE']) {
     const { plan, error } = planVideo({ style, settings });
     plans[style] = plan ? { mode: plan.mode, provider: plan.provider, video: plan.models.video, sceneSeconds: plan.sceneSeconds, estimate: plan.estimate } : { error };
   }
   return {
-    settings: { tier: settings.tier, perVideoMaxUsd: settings.perVideoMaxUsd, perDayMaxUsd: settings.perDayMaxUsd },
+    settings: { tier: settings.tier, perVideoMaxUsd: settings.perVideoMaxUsd, perDayMaxUsd: settings.perDayMaxUsd, hybrid: settings.hybrid !== false, targetSeconds: settings.targetSeconds, captions: settings.captions !== false },
     spentTodayUsd: r4(Object.values(spentBy).reduce((a, b) => a + b, 0)),
     providers,
     models: MODELS.filter((m) => m.provider !== 'mock' || mockAllowed()).map((m) => {
