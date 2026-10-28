@@ -123,7 +123,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   assert.ok(frameSubs.every((s) => s.model === 'fal-ai/nano-banana-pro/edit' && s.body.image_urls[0].startsWith('data:image/png') && s.body.aspect_ratio === '9:16'));
   const clipSubs = fake.submitted.filter((s) => s.body.image_url);
   assert.equal(clipSubs.length, 3, 'three clips');
-  assert.ok(clipSubs.every((s) => /^https:\/\/cdn\.fake\/req\d+\.jpg$/.test(s.body.image_url) && s.body.duration === '8s'), 'each clip starts from its first frame');
+  assert.ok(clipSubs.every((s) => /^https:\/\/cdn\.fake\/req\d+\.jpg$/.test(s.body.image_url) && ['8s', '6s', '6s'].includes(s.body.duration)), 'each clip starts from its first frame');
   assert.ok(clipSubs.every((s) => s.model === 'fal-ai/veo3.1/fast/image-to-video' && s.body.negative_prompt));
   assert.equal(fake.mergeInputs.at(-1).length, 3, 'merged three clips');
 
@@ -131,7 +131,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
   assert.equal(r.status, 206);
   assert.equal(r.data.toString(), 'FAKE');
   r = await user('GET', `/api/videos/${ok.id}`);
-  assert.equal(r.data.seconds, 24);
+  assert.equal(r.data.seconds, 20);
   assert.equal(r.data.script.scenes.length, 3);
 
   // another user cannot see it
@@ -211,6 +211,8 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
 
   // Ingredients mode (like Google Flow): each clip is made from the first frame + the product photo as references
   process.env.VIMO_VIDEO_MODE = 'ingredients';
+  const { saveSettings: save } = await import('../src/engine/settings.js');
+  await save({ targetSeconds: 24 }); // the reference model only makes 8s clips
   try {
     await admin('POST', `/api/admin/users/${(await user('GET', '/api/auth/me')).data.user.id}/credits`, { delta: 1, note: 'test' });
     const start = fake.submitted.length;
@@ -224,6 +226,7 @@ test('full flow: top-up, approve, render, download, refund on failure', { skip }
     assert.ok(refSubs.every((x) => x.body.prompt.includes('Scene: ')), 'the scene is described when there is no first frame to animate');
   } finally {
     delete process.env.VIMO_VIDEO_MODE;
+    await save({ targetSeconds: 20 });
   }
 });
 
@@ -248,7 +251,7 @@ test('engine: voiceover mode, idempotent orders, spending limits, balance gate, 
   assert.equal(JSON.stringify(r.data).includes('test-key'), false, 'no key reaches the browser');
 
   r = await user('GET', '/api/videos/quote');
-  assert.deepEqual({ c: r.data.credits, s: r.data.seconds, a: r.data.available }, { c: 1, s: 24, a: true });
+  assert.deepEqual({ c: r.data.credits, s: r.data.seconds, a: r.data.available }, { c: 1, s: 20, a: true });
   assert.equal(JSON.stringify(r.data).match(/fal|veo|usd/i), null, 'the customer sees no provider or dollar');
 
   // AUTO = silent clips + one Egyptian voiceover laid over the joined video, two product photos as references

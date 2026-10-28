@@ -19,7 +19,7 @@ export const TARGET_SECONDS = 24;
 const SCRIPT_USD = 0.01; // one vision-LLM call for the script
 const CHARS_PER_WORD = 6;
 
-export const wordsPerSecond = (pace) => (pace === 'normal' ? 2.4 : 3);
+export const wordsPerSecond = (pace) => (pace === 'normal' ? 2.4 : 3.4);
 
 /** Models the engine may use right now: enabled by the admin, with credentials set. */
 export function availableModels(settings) {
@@ -76,7 +76,7 @@ export function hybridSeconds(durations, target = TARGET_SECONDS) {
 /**
  * @returns {{ plan }|{ error }} error is for the admin log; the customer gets a generic message.
  */
-export function planVideo({ style = 'AUTO', pace = 'fast', settings, preferReferences = env.videoMode() === 'ingredients', target = TARGET_SECONDS }) {
+export function planVideo({ style = 'AUTO', pace = 'fast', settings, preferReferences = env.videoMode() === 'ingredients', target = settings.targetSeconds || TARGET_SECONDS }) {
   const models = availableModels(settings);
   const tier = settings.tier;
   const videos = models.filter((m) => m.kind === 'video' && m.tier === tier);

@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env, publicConfig } from './config.js';
+import { loadSettings } from './engine/settings.js';
 import { errorHandler } from './errors.js';
 import authRoutes from './routes/auth.js';
 import videoRoutes from './routes/videos.js';
@@ -26,7 +27,11 @@ export function createApp() {
   app.use(express.json({ limit: '15mb' })); // product photos arrive as base64 data URLs
 
   app.get('/health', (req, res) => res.json({ ok: true }));
-  app.get('/api/config', (req, res) => res.json(publicConfig()));
+  app.get('/api/config', async (req, res) => {
+    const cfg = publicConfig();
+    try { cfg.videoSeconds = (await loadSettings()).targetSeconds || cfg.videoSeconds; } catch { /* keep the env default */ }
+    res.json(cfg);
+  });
   app.use('/api/auth', authRoutes);
   app.use('/api/videos', videoRoutes);
   app.use('/api/wallet', walletRoutes);

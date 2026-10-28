@@ -45,7 +45,7 @@ async function overview() {
     plans[style] = plan ? { mode: plan.mode, provider: plan.provider, video: plan.models.video, sceneSeconds: plan.sceneSeconds, estimate: plan.estimate } : { error };
   }
   return {
-    settings: { tier: settings.tier, perVideoMaxUsd: settings.perVideoMaxUsd, perDayMaxUsd: settings.perDayMaxUsd, hybrid: settings.hybrid !== false },
+    settings: { tier: settings.tier, perVideoMaxUsd: settings.perVideoMaxUsd, perDayMaxUsd: settings.perDayMaxUsd, hybrid: settings.hybrid !== false, targetSeconds: settings.targetSeconds },
     spentTodayUsd: r4(Object.values(spentBy).reduce((a, b) => a + b, 0)),
     providers,
     models: MODELS.filter((m) => m.provider !== 'mock' || mockAllowed()).map((m) => {

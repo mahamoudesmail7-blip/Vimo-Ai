@@ -18,9 +18,9 @@ const STYLE_DIRECTION = {
 };
 
 const NEGATIVE = 'product changes shape, product morphing, melting, warped or extra parts, different colors, changed or misspelled logo, distorted hands, extra fingers, cartoon, 3D render, CGI, plastic skin, on-screen text, subtitles, captions, watermark';
-export const MAX_VOICE_WORDS = 24; // ~8 seconds of fast, energetic Egyptian speech
-/** How many spoken words fit a scene: ~3 words/s fast, ~2.4 normal. */
-export const wordsFor = (seconds, pace = 'fast') => Math.max(8, Math.round(seconds * (pace === 'normal' ? 2.4 : 3)));
+export const MAX_VOICE_WORDS = 27; // ~8 seconds of fast, energetic Egyptian speech
+/** How many spoken words fit a scene: ~3.4 words/s fast, ~2.4 normal. */
+export const wordsFor = (seconds, pace = 'fast') => Math.max(8, Math.round(seconds * (pace === 'normal' ? 2.4 : 3.4)));
 const limitsOf = (clipCount, sceneSeconds, pace) => Array.from({ length: clipCount }, (_, i) => wordsFor(sceneSeconds?.[i] || env.clipSeconds(), pace));
 
 let fetchImpl = (...args) => fetch(...args);
@@ -229,7 +229,7 @@ export function keyframePrompt(scene, { product, style, voiceGender, aspectRatio
 export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, withScene = false, mode = 'speech', music = 'none', pace = 'fast' }) {
   const speech = pace === 'normal'
     ? 'in Egyptian Arabic dialect, warm and clear at a natural pace, with matching lip movement, finishing the line before the clip ends'
-    : 'in Egyptian Arabic dialect, fast and energetic like a fast-paced TikTok ad, clearly, with no long pauses and matching lip movement, finishing the line before the clip ends';
+    : 'in Egyptian Arabic dialect, speaking quickly (a brisk, rapid delivery, never slow or drawn out) and energetic like a fast-paced TikTok ad, clearly, with no pauses and matching lip movement, finishing the line before the clip ends';
   return [
     STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC,
     `Camera: ${scene.camera || 'medium shot'}.`,

@@ -18,6 +18,8 @@ test('scene lengths reach ~24s with each model\'s clip durations', () => {
   assert.deepEqual(sceneSeconds([8]), [8, 8, 8]);
   assert.deepEqual(sceneSeconds([5, 10]), [10, 10, 5]);
   assert.deepEqual(sceneSeconds([6, 10]), [6, 6, 6, 6]);
+  assert.deepEqual(sceneSeconds([4, 6, 8], 20), [8, 6, 6]);
+  assert.equal(defaults().targetSeconds, 20);
 });
 
 test('a fresh install is on the cheapest tier with a $2 per-video cap', () => {
@@ -77,7 +79,7 @@ test('silent-only engines make UGC with a voiceover; admin price overrides chang
     s.models['fal:veo31-lite'] = { usdPerSecond: { silent: 0.08 } };
     ({ plan } = planVideo({ style: 'AUTO', settings: s }));
     assert.equal(plan.models.video, 'higgsfield:kling25-std');
-    assert.deepEqual(plan.sceneSeconds, [10, 10, 5]);
+    assert.deepEqual(plan.sceneSeconds, [10, 5, 5], '20s default length');
     assert.equal(plan.provider, 'higgsfield');
     assert.ok(plan.estimate.byProvider.fal > 0, 'frames, voice and merge still run on fal');
     ({ plan } = planVideo({ style: 'UGC', settings: s }));
