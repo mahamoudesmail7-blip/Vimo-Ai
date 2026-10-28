@@ -156,3 +156,15 @@ test('Google Vertex Veo: service-account token, predictLongRunning, video bytes 
     delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   }
 });
+
+test('captions: two short lines per cue inside each scene, offer badge on the last scene', async () => {
+  const { captionCues, toAss } = await import('../src/engine/captions.js');
+  const scenes = [{ voiceover: 'واحد اتنين تلاتة أربعة خمسة ستة سبعة' }, { voiceover: 'اطلبه دلوقتي' }];
+  const c = captionCues({ scenes, sceneSeconds: [8, 6], mode: 'speech', offer: '500 جنيه بدل 1000' });
+  assert.deepEqual(c.cues.map((x) => [x.top, x.bottom]), [['واحد اتنين تلاتة', 'أربعة خمسة ستة'], ['سبعة', null], ['اطلبه دلوقتي', null]]);
+  assert.ok(c.cues[1].end <= 8 && c.cues[2].start >= 8, 'a line stays inside its own clip');
+  assert.deepEqual(c.badge, { text: '500 جنيه بدل 1000', start: 8, end: 14 });
+  const ass = toAss(c, '9:16');
+  assert.match(ass, /PlayResY: 1280/);
+  assert.equal((ass.match(/^Dialogue:/gm) || []).length, 5);
+});

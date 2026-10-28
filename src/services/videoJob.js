@@ -24,14 +24,15 @@ import { modelByEndpoint } from '../engine/catalog.js';
 import { recordEvent } from '../engine/budget.js';
 import { EngineError, isTransient } from '../engine/errors.js';
 import { toBuffer } from '../engine/media.js';
-import { composeHybrid } from '../engine/compose.js';
+import { composeHybrid, ffmpegPath } from '../engine/compose.js';
+import { captionCues, toAss, burnCaptions } from '../engine/captions.js';
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
 const MAX_CLIP_ATTEMPTS = 2;
 const MAX_IMAGES = 4;
 const SERVICE_PAUSED = 'الخدمة متوقفة مؤقتًا من عندنا، والرصيد رجعلك. جرب تاني كمان شوية.';
 const UNAVAILABLE = 'إنشاء الفيديو مش متاح دلوقتي. جرب تاني كمان شوية أو كلم الدعم.';
-const STYLES = ['AUTO', 'UGC', 'SHOWCASE', 'CINEMATIC'];
+const STYLES = ['AUTO', 'UGC', 'STUDIO', 'SHOWCASE', 'CINEMATIC'];
 const RATIOS = ['9:16', '16:9'];
 
 const running = new Set();
@@ -483,8 +484,24 @@ async function storeVideo(job) {
     const blob = await prisma.blob.findUnique({ where: { key: ref.slice(5) }, select: { bytes: true } });
     return save(job, { status: 'COMPLETED', progress: 100, video_key: ref.slice(5), video_bytes: blob?.bytes || null, finished_at: new Date(), error: null });
   }
-  const stored = await putBuffer(await toBuffer(ref), 'video/mp4', 'videos');
+  const stored = await putBuffer(await withCaptions(job, await toBuffer(ref)), 'video/mp4', 'videos');
   return save(job, { status: 'COMPLETED', progress: 100, video_key: stored.key, video_bytes: stored.bytes, finished_at: new Date(), error: null });
+}
+
+// The spoken line on screen (and the offer badge). Free, done here; if it
+// fails the video is kept without captions rather than failing the order.
+async function withCaptions(job, buffer) {
+  try {
+    if ((await loadSettings()).captions === false || !ffmpegPath()) return buffer;
+    const plan = planOf(job);
+    const scenes = parse(job.script_json)?.scenes;
+    if (!scenes?.length) return buffer;
+    const cues = captionCues({ scenes, sceneSeconds: plan.sceneSeconds, mode: plan.mode, offer: job.offer });
+    return await burnCaptions(buffer, toAss(cues, job.aspect_ratio));
+  } catch (err) {
+    console.warn(`[worker] job ${job.id}: captions skipped:`, err.message);
+    return buffer;
+  }
 }
 
 // Hybrid: the AI clip, then the real product photos (and the AI first frame)
@@ -500,6 +517,6 @@ async function composeJob(job) {
     photoSeconds: clips.filter((c) => c.kind === 'photo').map((c) => c.seconds),
     audioUrl: audio?.tts?.url || null, aspectRatio: job.aspect_ratio,
   });
-  const stored = await putBuffer(buffer, 'video/mp4', 'videos');
+  const stored = await putBuffer(await withCaptions(job, buffer), 'video/mp4', 'videos');
   return save(job, { status: 'COMPLETED', progress: 100, video_key: stored.key, video_bytes: stored.bytes, finished_at: new Date(), error: null });
 }

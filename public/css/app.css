@@ -107,7 +107,7 @@ textarea { min-height: 96px; resize: vertical; }
 .photos.empty { grid-template-columns: 1fr; }
 .photos.empty .add-photo { aspect-ratio: auto; min-height: 190px; }
 
-.styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.styles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .style-opt { text-align: start; background: var(--surface-2); border: 1.5px solid transparent; border-radius: 16px; padding: 14px; cursor: pointer; transition: border-color .15s, background .15s; }
 .style-opt b { display: block; font-weight: 600; font-size: 15px; }
 .style-opt span { display: block; color: var(--muted); font-size: 13px; line-height: 1.5; margin-top: 2px; }
