@@ -27,10 +27,20 @@ const rtl = (t) => `\u200F${t}\u200F`;
 
 /** Splits a run of words into cues of two short lines, timed over [from, to]. */
 function cuesFor(list, from, to) {
+  // a line ends after 3 words or at a comma/full stop; a cue never runs past a sentence end
   const lines = [];
-  for (let i = 0; i < list.length; i += WORDS_PER_LINE) lines.push(list.slice(i, i + WORDS_PER_LINE).join(' '));
+  let cur = [];
+  for (const w of list) {
+    cur.push(w);
+    if (cur.length === WORDS_PER_LINE || /[،,.!؟?]$/.test(w)) { lines.push(cur.join(' ')); cur = []; }
+  }
+  if (cur.length) lines.push(cur.join(' '));
   const groups = [];
-  for (let i = 0; i < lines.length; i += 2) groups.push(lines.slice(i, i + 2));
+  for (let i = 0; i < lines.length;) {
+    const pair = /[.!؟?]$/.test(lines[i]) || i + 1 >= lines.length;
+    groups.push(pair ? [lines[i]] : [lines[i], lines[i + 1]]);
+    i += pair ? 1 : 2;
+  }
   const total = list.length || 1;
   const cues = [];
   let t = from;
