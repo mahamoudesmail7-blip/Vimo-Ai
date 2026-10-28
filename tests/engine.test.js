@@ -169,3 +169,23 @@ test('captions: two short lines per cue inside each scene, offer badge on the la
   assert.equal((ass.match(/^Dialogue:/gm) || []).length, 5);
   assert.deepEqual(c.punches, [[4, 8], [11, 14]], 'a punch-in halfway through each talking scene');
 });
+
+test('numbers are spoken as Egyptian words (prices, percents), decimals kept', async () => {
+  const { speakNumbers } = await import('../src/services/numbers.js');
+  assert.equal(speakNumbers('بـ 299 جنيه بدل 450'), 'بـ ميتين وتسعة وتسعين جنيه بدل ربعمية وخمسين');
+  assert.equal(speakNumbers('خصم 50%'), 'خصم خمسين في المية');
+  assert.equal(speakNumbers('بـ 1,500 جنيه و ١٢٠٠'), 'بـ ألف وخمسمية جنيه و ألف وميتين');
+  assert.equal(speakNumbers('3500'), 'تلات تلاف وخمسمية');
+  assert.equal(speakNumbers('اطلبيه ب350 جنيه بدل 700'), 'اطلبيه بـ تلاتمية وخمسين جنيه بدل سبعمية');
+  assert.equal(speakNumbers('2.5 كيلو'), '2.5 كيلو');
+  assert.equal(speakNumbers('سعره 350ج بدل700'), 'سعره تلاتمية وخمسين جنيه بدل سبعمية');
+  assert.equal(speakNumbers('350 ج.م بس'), 'تلاتمية وخمسين جنيه بس');
+});
+
+test('a too-long spoken line is cut at a clause end, never mid-sentence', async () => {
+  const { fitLine } = await import('../src/services/script.js');
+  const line = 'شوفي إزاي بيشيل الشعر الخفيف من الشفة والدقن والخدود بكل سهولة، ومش بيأذي بشرتك خالص، حجمه صغير تاخديه معاكي في الشنطة';
+  assert.equal(fitLine(line, 20), 'شوفي إزاي بيشيل الشعر الخفيف من الشفة والدقن والخدود بكل سهولة، ومش بيأذي بشرتك خالص.');
+  assert.equal(fitLine('واحد اتنين تلاتة أربعة خمسة ستة في', 7), 'واحد اتنين تلاتة أربعة خمسة ستة في');
+  assert.equal(fitLine('واحد اتنين تلاتة أربعة خمسة ستة في سبعة', 7), 'واحد اتنين تلاتة أربعة خمسة ستة');
+});

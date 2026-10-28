@@ -65,10 +65,11 @@ test('template lines are long enough for an 8s clip and drop emoji', () => {
 test('the script is written by a vision LLM on fal when there is no OpenAI key', async () => {
   process.env.OPENAI_API_KEY = '';
   process.env.FAL_KEY = 'k';
-  let sent;
+  const calls = [];
   setFetch(async (url, opts) => {
-    sent = { url, body: JSON.parse(opts.body) };
-    const reply = '```json\n' + JSON.stringify({
+    calls.push({ url, body: JSON.parse(opts.body) });
+    // the second call is the proofread pass over the spoken lines
+    const reply = calls.length === 2 ? JSON.stringify({ lines: ['سطر مصحّح 1', 'سطر مصحّح 2', 'سطر مصحّح 3'] }) : '```json\n' + JSON.stringify({
       product: { what: 'anti-choking device', usage: 'mask pressed over mouth and nose, plunger pulled', details: 'grey cylinder, orange handles, clear mask' },
       hook: 'h', cta: 'c',
       scenes: [1, 2, 3].map((i) => ({ camera: 'cu', visual: `frame ${i}`, motion: `move ${i}`, voiceover: `سطر ${i}` })),
@@ -76,10 +77,17 @@ test('the script is written by a vision LLM on fal when there is no OpenAI key',
     return new Response(JSON.stringify({ output: reply }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   });
   try {
-    const s = await writeScript({ productName: 'جهاز', clipCount: 3, style: 'UGC', voiceGender: 'MALE', imageDataUrl: 'data:image/png;base64,AA' });
+    const s = await writeScript({ productName: 'جهاز', clipCount: 3, style: 'UGC', goal: 'EMOTIONAL', offer: '350ج بدل700', voiceGender: 'MALE', imageDataUrl: 'data:image/png;base64,AA' });
+    const [sent, check] = calls;
+    assert.equal(calls.length, 2);
     assert.equal(sent.url, 'https://fal.run/openrouter/router/vision');
     assert.deepEqual(sent.body.image_urls, ['data:image/png;base64,AA']);
     assert.match(sent.body.prompt, /how it is physically held and used/);
+    assert.match(sent.body.prompt, /Goal: emotional/);
+    assert.match(sent.body.prompt, /تلاتمية وخمسين جنيه بدل سبعمية/);
+    assert.match(check.body.system_prompt, /proofread/);
+    assert.deepEqual(s.scenes.map((x) => x.voiceover), ['سطر مصحّح 1', 'سطر مصحّح 2', 'سطر مصحّح 3']);
+    assert.equal(s.hook, 'سطر مصحّح 1');
     assert.equal(s.source, 'AI');
     assert.equal(s.product.usage, 'mask pressed over mouth and nose, plunger pulled');
     assert.deepEqual(s.scenes.map((x) => x.motion), ['move 1', 'move 2', 'move 3']);
