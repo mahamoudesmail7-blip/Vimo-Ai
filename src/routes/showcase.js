@@ -10,9 +10,9 @@ const router = Router();
 router.get('/', asyncRoute(async (req, res) => {
   const rows = await prisma.videoJob.findMany({
     where: { showcase: true, status: 'COMPLETED' }, orderBy: { finished_at: 'desc' }, take: 24,
-    select: { id: true, product_name: true, aspect_ratio: true },
+    select: { id: true, product_name: true, aspect_ratio: true, style: true },
   });
-  res.json({ videos: rows.map((r) => ({ id: r.id, productName: r.product_name, aspectRatio: r.aspect_ratio, videoUrl: `/api/showcase/${r.id}/video`, imageUrl: `/api/showcase/${r.id}/image` })) });
+  res.json({ videos: rows.map((r) => ({ id: r.id, productName: r.product_name, aspectRatio: r.aspect_ratio, style: r.style === 'CINEMATIC' ? 'SHOWCASE' : r.style, videoUrl: `/api/showcase/${r.id}/video`, imageUrl: `/api/showcase/${r.id}/image` })) });
 }));
 
 async function shown(id) {

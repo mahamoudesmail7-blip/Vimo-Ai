@@ -45,12 +45,43 @@ function route() {
 // ---------------------------------------------------------------------------
 // إنشاء فيديو
 // ---------------------------------------------------------------------------
+// [value, title, what the customer gets, what is in the video]
 const STYLE_OPTS = [
-  ['AUTO', 'تلقائي', 'إحنا نختار أنسب شكل لمنتجك'],
-  ['UGC', 'شخص بيتكلم', 'زي ريفيو حقيقي على تيك توك'],
-  ['STUDIO', 'استوديو', 'شخص قاعد في استوديو شيك وبيكلم الكاميرا'],
-  ['SHOWCASE', 'عرض المنتج', 'لقطات قريبة للمنتج بتعليق صوتي'],
+  ['AUTO', 'تلقائي', 'مش عارف تختار؟ إحنا بنشوف منتجك ونختار الشكل اللي يناسبه.', ['بنختار بين الأشكال اللي تحت', 'مناسب لو أول مرة تجرّب']],
+  ['UGC', 'شخص بيتكلم', 'شخص مصري ماسك منتجك وبيتكلم عنه للكاميرا في بيت حقيقي، زي ريفيو على تيك توك.', ['تصوير موبايل طبيعي', 'نفس الشخص من أول الفيديو لآخره', 'كلام مكتوب على الشاشة']],
+  ['STUDIO', 'استوديو', 'شخص قاعد في استوديو شيك بحيطة غامقة وإضاءة دافية، ماسك منتجك وبيكلم الكاميرا.', ['شكل احترافي زي إعلانات البراندات', 'كلام مكتوب أبيض وأصفر', 'السعر في بادج أصفر في الآخر']],
+  ['SHOWCASE', 'عرض المنتج', 'لقطات قريبة لمنتجك بحركة كاميرا ناعمة وصوت بيشرح، من غير شخص.', ['المنتج هو البطل', 'مناسب للإكسسوارات والأجهزة']],
 ];
+const styleCard = ([v, t, d, pts], f) => `
+  <div class="style-opt ${f.style === v ? 'active' : ''}" data-style="${v}" role="radio" aria-checked="${f.style === v}" tabindex="0">
+    <div class="style-text"><b>${t}</b><span>${d}</span><ul>${pts.map((x) => `<li>${x}</li>`).join('')}</ul></div>
+    <div class="style-sample" data-sample="${v}" hidden></div>
+  </div>`;
+
+// One finished sample video per style (picked by the admin), shown inside each card.
+async function drawStyleSamples(view) {
+  const { videos = [] } = await api('GET', '/api/showcase').catch(() => ({}));
+  const pick = { AUTO: videos[0] };
+  for (const v of videos) pick[v.style] ||= v;
+  for (const box of $$('[data-sample]', view)) {
+    const v = pick[box.dataset.sample];
+    if (!v) continue;
+    box.hidden = false;
+    box.innerHTML = `<video src="${v.videoUrl}" poster="${v.imageUrl}" muted loop playsinline autoplay preload="metadata"></video><button type="button" class="sample-play" aria-label="شوف المثال بالصوت">▶ شوف مثال</button>`;
+    $('.sample-play', box).onclick = (e) => { e.stopPropagation(); playSample(v); };
+  }
+}
+
+function playSample(v) {
+  const wrap = document.createElement('div');
+  wrap.className = 'sample-modal';
+  wrap.innerHTML = `<div class="sample-box ${v.aspectRatio === '16:9' ? 'wide' : ''}"><video src="${v.videoUrl}" controls autoplay playsinline></video><button type="button" class="x" aria-label="اقفل">×</button></div>`;
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  wrap.onclick = (e) => { if (e.target === wrap || e.target.classList.contains('x')) close(); };
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(wrap);
+}
 
 async function renderCreate(view) {
   const f = state.form;
@@ -75,7 +106,7 @@ async function renderCreate(view) {
       </div>
       <div class="field">
         <span class="label">شكل الإعلان</span>
-        <div class="styles">${STYLE_OPTS.map(([v, t, d]) => `<button type="button" class="style-opt ${f.style === v ? 'active' : ''}" data-style="${v}"><b>${t}</b><span>${d}</span></button>`).join('')}</div>
+        <div class="styles" role="radiogroup">${STYLE_OPTS.map((o) => styleCard(o, f)).join('')}</div>
       </div>
       <details class="advanced" id="advanced">
         <summary>إعدادات متقدمة</summary>
@@ -123,7 +154,15 @@ async function renderCreate(view) {
   drawPhotos();
 
   // choices
-  $$('.style-opt', view).forEach((b) => { b.onclick = () => { f.style = b.dataset.style; f.script = null; $$('.style-opt', view).forEach((x) => x.classList.toggle('active', x === b)); drawScript(); }; });
+  $$('.style-opt', view).forEach((b) => {
+    b.onclick = () => {
+      f.style = b.dataset.style; f.script = null;
+      $$('.style-opt', view).forEach((x) => { x.classList.toggle('active', x === b); x.setAttribute('aria-checked', x === b); });
+      drawScript();
+    };
+    b.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.click(); } };
+  });
+  drawStyleSamples(view);
   $$('[data-seg]', view).forEach((b) => {
     b.onclick = () => {
       f[b.dataset.seg] = b.dataset.value;
