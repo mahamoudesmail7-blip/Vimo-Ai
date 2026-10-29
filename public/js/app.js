@@ -1,6 +1,7 @@
 // The customer app: four pages only. إنشاء فيديو، فيديوهاتي، الرصيد، حسابي.
 // Nothing here names an AI provider or a model; the server picks the engine.
 import { api, esc, $, $$, fmt, fmtDate, toast, shrinkImage, STATUS } from '/js/common.js';
+import { reveal, slider, aiSteps } from '/js/motion.js';
 
 const MAX_PHOTOS = 4;
 const newRef = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, '');
@@ -38,6 +39,7 @@ function route() {
   const view = $('#view');
   view.classList.toggle('wide', tab === 'videos');
   window.scrollTo(0, 0);
+  view.classList.remove('enter'); void view.offsetWidth; view.classList.add('enter');
   ({ create: renderCreate, videos: renderVideos, wallet: renderWallet, account: renderAccount }[tab] || renderCreate)(view)
     .catch((err) => { view.innerHTML = `<div class="empty">${esc(err.message)}</div>`; });
 }
@@ -58,6 +60,22 @@ const GOAL_OPTS = [
   ['PROBLEM', 'مشكلة وحل', 'مشكلة بيقابلها والمنتج بيحلها'],
   ['OFFER', 'عرض خاص', 'السعر والعرض هما البطل'],
 ];
+// what the AI does for the customer, on the slider at the top of the create page
+const AI_SLIDES = [
+  ['eye', 'بيفهم منتجك من الصورة', 'نوعه وألوانه وتفاصيله، من غير ما تكتب وصف طويل.'],
+  ['spark', 'بيكتب 5 هوكات ويختار الأقوى', 'كل هوك بزاوية مختلفة وبتقييم من 10.'],
+  ['walk', 'منتجك وهو بيتستخدم فعلًا', 'الكوتشي في الرجل، والشنطة على الكتف، وكل الألوان.'],
+  ['check', 'بيراجع كل كلمة قبل ما تدفع', 'السعر والتكرار والمميزات اللي محدش قالها.'],
+  ['mic', 'صوت مصري طبيعي', 'وبنسمع الفيديو بعد ما يخلص عشان نتأكد إن السعر اتقال صح.'],
+];
+const ICONS = {
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
+  walk: '<circle cx="13" cy="4.5" r="2"/><path d="M10 21l2-6 3 3v3M9 11l3-3 3 2 3 1M12 8l-1 5"/>',
+  check: '<path d="M4 12.5 9 17.5 20 6.5"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+};
+const aiSlide = ([icon, title, text]) => `<div class="slide ai-slide"><span class="ai-ico"><svg viewBox="0 0 24 24">${ICONS[icon]}</svg></span><div><b>${title}</b><span>${text}</span></div></div>`;
 const CHECK_NAMES = { REPEAT: 'تكرار', INVENTED: 'ميزة مش مكتوبة', PRICE: 'السعر', LONG_SENTENCE: 'جملة طويلة', TOO_LONG: 'كلام كتير', FORMAL: 'فصحى', DIGITS: 'أرقام' };
 const step = (n, title, body, hint = '') => `<section class="step"><div class="step-head"><span class="step-n">${fmt(n)}</span><span class="label">${title}</span></div>${hint ? `<div class="hint step-hint">${hint}</div>` : ''}${body}</section>`;
 
@@ -99,8 +117,9 @@ async function renderCreate(view) {
   const seg = (name, items) => `<div class="seg" role="radiogroup">${items.map(([v, l]) => `<button type="button" data-seg="${name}" data-value="${v}" class="${f[name] === v ? 'active' : ''}">${l}</button>`).join('')}</div>`;
 
   view.innerHTML = `
-    <h1 class="hero-title">إعلان فيديو لمنتجك.</h1>
-    <p class="hero-sub">ارفع صورة المنتج، واضغط زرار السكريبت. الباقي علينا.</p>
+    <h1 class="hero-title reveal">إعلان فيديو لمنتجك<span class="ai-dot">.</span></h1>
+    <p class="hero-sub reveal">ارفع صورة المنتج، واضغط زرار السكريبت. الباقي علينا.</p>
+    <div class="slider reveal" id="aiSlider" aria-roledescription="slider"><div class="slides">${AI_SLIDES.map(aiSlide).join('')}</div><div class="dots"></div></div>
     ${q.available ? '' : '<div class="notice">إنشاء الفيديوهات متوقف مؤقتًا. جرّب تاني كمان شوية.</div>'}
     <form class="card" id="createForm" novalidate>
       ${step(1, 'صورة المنتج', `<div class="photos" id="photos"></div>
@@ -169,10 +188,12 @@ async function renderCreate(view) {
   const drawAnalysis = (busy = false) => {
     const box = $('#analysis');
     const a = f.analysis;
-    if (busy) { box.innerHTML = '<div class="analysis busy">بنشوف المنتج في الصور…</div>'; return; }
+    $('#photos').classList.toggle('scanning', busy);
+    if (busy) { box.innerHTML = '<div class="analysis busy"></div>'; aiSteps(box.firstChild, ['بنحدد نوع المنتج', 'بنشوف الألوان والتفاصيل', 'بنفرّق بين المؤكد واللي مش باين'], { every: 1100 }); return; }
     if (!a) { box.innerHTML = ''; return; }
-    const chips = (list, cls) => list.map((x) => `<span class="fact ${cls}">${esc(x)}</span>`).join('');
-    box.innerHTML = `<div class="analysis">
+    let n = 0;
+    const chips = (list, cls) => list.map((x) => `<span class="fact ${cls}" style="--d:${(n++) * 60}ms">${esc(x)}</span>`).join('');
+    box.innerHTML = `<div class="analysis pop">
       ${a.productAr ? `<div class="an-title">${esc(a.productAr)}</div>` : ''}
       ${a.colors.length ? `<div class="an-row"><span class="an-k">الألوان</span>${chips(a.colors, 'color')}</div>` : ''}
       ${a.confirmed.length ? `<div class="an-row"><span class="an-k">باين في الصور</span>${chips(a.confirmed, 'ok')}</div>` : ''}
@@ -201,6 +222,8 @@ async function renderCreate(view) {
   file.onchange = () => { addFiles(file.files); file.value = ''; };
   drawPhotos();
   drawAnalysis();
+  reveal(view);
+  slider($('#aiSlider'), { every: 3800 });
 
   // choices
   $$('.style-opt', view).forEach((b) => {
@@ -249,7 +272,7 @@ async function renderCreate(view) {
     const el = $('#checks');
     const c = f.script?.checks;
     if (!el || !c) return;
-    el.innerHTML = `<div class="checks ${c.ok ? 'ok' : ''}">
+    el.innerHTML = `<div class="checks pop ${c.ok ? 'ok' : ''}">
       <div class="checks-title">${c.ok ? '✓ راجعنا السكريبت ومفيش مشاكل' : 'راجعنا السكريبت، وفي حاجات محتاجة نظرة:'}</div>
       ${c.issues.map((x) => `<div class="issue">⚠️ <b>${CHECK_NAMES[x.kind] || ''}</b> ${esc(x.message)}</div>`).join('')}
       <div class="passed">${c.passed.map((x) => `<span>✓ ${esc(x)}</span>`).join('')}</div>
@@ -301,10 +324,10 @@ async function renderCreate(view) {
     const hooks = sc.hooks || [];
     box.innerHTML = `
       ${hooks.length ? `<div class="hooks"><span class="label sub-label">البداية (الهوك) <span class="muted" style="font-weight:400">كتبنا ${fmt(hooks.length)} واخترنا الأقوى، اضغط على أي واحد تبدّل بيه</span></span>
-        ${hooks.map((h, k) => `<button type="button" class="hook ${k === sc.hookIndex ? 'active' : ''}" data-hook="${k}"><span class="score">${fmt(h.score)}/10</span><span class="h-text">${esc(h.text)}</span>${h.why ? `<span class="h-why">${esc(h.why)}</span>` : ''}</button>`).join('')}
+        ${hooks.map((h, k) => `<button type="button" class="hook reveal ${k === sc.hookIndex ? 'active' : ''}" data-hook="${k}"><span class="score">${fmt(h.score)}/10<span class="meter"><i style="--w:${h.score * 10}%"></i></span></span><span class="h-text">${esc(h.text)}</span>${h.why ? `<span class="h-why">${esc(h.why)}</span>` : ''}</button>`).join('')}
       </div>` : ''}
       <span class="label sub-label">السكريبت <span class="muted" style="font-weight:400">(عدّل أي جملة أو خلّينا نكتبها تاني)</span></span>
-      ${sc.scenes.map((s, i) => `<div class="script-scene">
+      ${sc.scenes.map((s, i) => `<div class="script-scene reveal">
         <div class="scene-head"><b>${fmt(i + 1)}. ${n[i]}</b><span class="hint">${fmt(sc.sceneSeconds?.[i] || sc.clipSeconds)} ثواني · <span data-count="${i}"></span></span></div>
         ${s.shotAr ? `<div class="shot">🎬 ${esc(s.shotAr)}</div>` : ''}
         <textarea data-scene="${i}" rows="2" style="min-height:64px" aria-label="كلام المشهد ${fmt(i + 1)}">${esc(s.voiceover)}</textarea>
@@ -319,20 +342,32 @@ async function renderCreate(view) {
     $$('[data-rewrite]', box).forEach((b) => { b.onclick = () => rewrite(Number(b.dataset.rewrite), b); });
     $('#preview').onclick = preview;
     drawChecks();
+    reveal(box);
   }
   async function preview() {
     const err = $('#err');
     err.textContent = '';
     if (!f.images.length) { err.textContent = 'ارفع صورة المنتج الأول.'; return; }
     if (!hasProduct()) { err.textContent = 'اكتب سطر عن المنتج الأول.'; $('#description').focus(); return; }
-    const btn = $('#preview');
-    btn.disabled = true;
-    btn.textContent = 'بنكتب 5 بدايات ونختار أحسنها ونراجع الكلام…';
+    const box = $('#scriptBox');
+    const keep = box.innerHTML;
+    box.innerHTML = '<div class="ai-box"></div>';
+    const done = aiSteps(box.firstChild, ['بنفهم المنتج من الصور', 'بنكتب 5 هوكات مختلفة', 'بنقيّم كل هوك ونختار الأقوى', 'بنختار مشاهد استخدام حقيقي', 'بنكتب الكلام بالمصري', 'بنراجع السعر والتكرار والمميزات']);
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
     try {
-      f.script = await api('POST', '/api/videos/script-preview', inputs());
+      const script = await api('POST', '/api/videos/script-preview', inputs());
+      done();
+      await new Promise((ok) => setTimeout(ok, 450));
+      f.script = script;
       drawScript();
-      $('#scriptBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (e2) { err.textContent = e2.message; btn.disabled = false; btn.textContent = 'جرّب تاني'; }
+      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e2) {
+      done();
+      box.innerHTML = keep;
+      $('#preview').onclick = preview;
+      $('#preview').textContent = 'جرّب تاني';
+      err.textContent = e2.message;
+    }
   }
   drawScript();
 
@@ -365,12 +400,13 @@ async function renderCreate(view) {
 // ---------------------------------------------------------------------------
 // فيديوهاتي
 // ---------------------------------------------------------------------------
+const stageOf = (p = 0) => (p < 15 ? 'بنجهّز المشاهد' : p < 60 ? 'بنصوّر المشاهد' : p < 90 ? 'بنركّب الصوت والكلام' : 'لمسات أخيرة');
 function videoCard(v) {
   const [label, tone] = STATUS[v.status] || [v.status, ''];
   const done = ['COMPLETED', 'FAILED'].includes(v.status);
   const media = v.videoUrl
     ? `<video src="${v.videoUrl}" controls playsinline preload="metadata" poster="${v.imageUrl}"></video>`
-    : `<img src="${v.imageUrl}" alt="" /><div class="overlay">${esc(label)}${done ? '' : '…'}</div>`;
+    : `<img src="${v.imageUrl}" alt="" /><div class="overlay ${done ? '' : 'working'}">${done ? esc(label) : `<span class="ai-orb"><i></i><i></i><i></i></span><span>${stageOf(v.progress)}</span>`}</div>`;
   return `
     <div class="vcard">
       <div class="media ${v.aspectRatio === '16:9' ? 'wide' : ''}">${media}</div>
