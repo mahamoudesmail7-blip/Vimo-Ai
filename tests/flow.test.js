@@ -90,7 +90,7 @@ before(async () => {
   fal.setFetch(fakeFetch);
   (await import('../src/engine/media.js')).setFetch(fakeFetch);
   ({ processDueJobs } = await import('../src/services/videoJob.js'));
-  for (const t of ['engine_events', 'settings', 'credit_transactions', 'topup_requests', 'video_jobs', 'blobs', 'users']) await prisma.$executeRawUnsafe(`DELETE FROM "${t}"`);
+  for (const t of ['showcase_videos', 'engine_events', 'settings', 'credit_transactions', 'topup_requests', 'video_jobs', 'blobs', 'users']) await prisma.$executeRawUnsafe(`DELETE FROM "${t}"`);
   const { createApp } = await import('../src/server.js');
   server = createApp().listen(0);
   base = `http://127.0.0.1:${server.address().port}`;

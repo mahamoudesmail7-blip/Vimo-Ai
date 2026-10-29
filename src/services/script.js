@@ -159,11 +159,11 @@ const SYSTEM = [
 ].join(' ');
 
 /** Everything the ad may say as a fact: the seller's words and what the photos clearly show. */
-export function factsOf({ productName, description, details, analysis }) {
-  return [productName, description, details, ...(analysis?.confirmed || []), ...(analysis?.colors || [])].filter(Boolean).join(' . ');
+export function factsOf({ productName, description, details, problem, analysis }) {
+  return [productName, description, details, problem, ...(analysis?.confirmed || []), ...(analysis?.colors || [])].filter(Boolean).join(' . ');
 }
 
-function scriptRequest({ productName, description, details, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech', analysis = null }) {
+function scriptRequest({ productName, description, details, problem, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech', analysis = null }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
   const secs = Array.from({ length: clipCount }, (_, i) => sceneSeconds?.[i] || env.clipSeconds());
   const voiceover = mode === 'voiceover' || mode === 'hybrid';
@@ -172,6 +172,7 @@ function scriptRequest({ productName, description, details, offer, style, goal, 
     `Product name: ${productName}`,
     description ? `Seller's description: ${description}` : '',
     details ? `Extra details from the seller (true facts): ${details}` : '',
+    problem ? `The problem this product solves / what the buyer wants, in the seller's words (build the hook and the story on THIS, in the buyer's everyday words): ${problem}` : '',
     analysis ? `What the photos clearly show (confirmed): ${[analysis.productAr, ...analysis.confirmed].filter(Boolean).join('; ') || 'nothing more'}` : '',
     analysis?.colors?.length > 1 ? `Color variants in the photos (show and name ALL of them in one scene): ${analysis.colors.join('، ')}` : '',
     analysis?.unknown?.length ? `NOT known, never say anything about these: ${analysis.unknown.join('; ')}` : '',
@@ -329,12 +330,12 @@ function syncHook(script) {
  * pass, the automatic review, and one more fixing pass if the review found
  * problems. `checks` says what was verified and what is still wrong.
  */
-export async function writeScript({ productName, description, details, offer, style, goal, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode, analysis = null }) {
+export async function writeScript({ productName, description, details, problem, offer, style, goal, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode, analysis = null }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
-  const facts = factsOf({ productName, description, details, analysis });
+  const facts = factsOf({ productName, description, details, problem, analysis });
   const review = (script) => ({ ...script, checks: checkScript({ scenes: script.scenes, limits, offer, facts }) });
   if (!env.openAiKey() && !env.falKey()) return review(templateScript({ productName, description, offer, clipCount, sceneSeconds, pace }));
-  const user = scriptRequest({ productName, description, details, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode, analysis });
+  const user = scriptRequest({ productName, description, details, problem, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode, analysis });
   try {
     const parsed = normalize(parseJsonObject(await askVision(user, imageDataUrl, SYSTEM, 0.8)), clipCount, limits);
     if (!parsed) throw new Error('script JSON missing scenes');
@@ -360,12 +361,13 @@ const REWRITE = [
 ].join(' ');
 
 /** A fresh version of one line; null when the model is not available or fails. */
-export async function rewriteLine({ productName, description, details, offer, goal, analysis, lines, index, limit, imageDataUrl }) {
+export async function rewriteLine({ productName, description, details, problem, offer, goal, analysis, lines, index, limit, imageDataUrl }) {
   if (!env.openAiKey() && !env.falKey()) return null;
   const role = index === 0 ? 'the hook (first words must stop the scroll)' : index === lines.length - 1 ? 'the offer and the call to order' : 'the benefits, with the product in use';
   const user = [
     GOAL_DIRECTION[goal] || GOAL_DIRECTION.SALES,
-    `True facts: ${factsOf({ productName, description, details, analysis })}`,
+    `True facts: ${factsOf({ productName, description, details, problem, analysis })}`,
+    problem ? `The buyer's problem: ${problem}` : '',
     offer ? `Price/offer, said exactly as: "${speakOffer(offer)}"` : 'No price was given: never say a price.',
     'The ad:',
     ...lines.map((l, i) => `${i + 1}. ${i === index ? '>>> ' : ''}${l}`),

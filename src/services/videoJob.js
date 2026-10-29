@@ -55,11 +55,12 @@ function readInputs(body) {
     description,
     offer: String(body.offer || '').trim().slice(0, 200) || null,
     details: String(body.details || '').trim().slice(0, 500) || null,
+    problem: String(body.problem || '').trim().slice(0, 800) || null,
     analysis,
     style: STYLES.includes(body.style) ? body.style : 'AUTO',
     aspectRatio: RATIOS.includes(body.aspectRatio) ? body.aspectRatio : '9:16',
     voiceGender: body.voiceGender === 'FEMALE' ? 'FEMALE' : 'MALE',
-    options: { music: body.music === 'light' ? 'light' : 'none', pace: body.pace === 'fast' ? 'fast' : 'normal', goal: GOALS.includes(body.goal) ? body.goal : 'SALES', details: String(body.details || '').trim().slice(0, 500) || null },
+    options: { music: body.music === 'light' ? 'light' : 'none', pace: body.pace === 'fast' ? 'fast' : 'normal', goal: GOALS.includes(body.goal) ? body.goal : 'SALES', details: String(body.details || '').trim().slice(0, 500) || null, problem: String(body.problem || '').trim().slice(0, 800) || null },
   };
 }
 
@@ -353,7 +354,7 @@ async function startJob(job) {
   if (!script) {
     script = await writeScript({
       productName: job.product_name, description: job.description, offer: job.offer, style: job.style,
-      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, goal: options.goal, details: options.details, mode: plan.mode, imageDataUrl: images, // every photo: colors and variants show up in the script
+      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, goal: options.goal, details: options.details, problem: options.problem, mode: plan.mode, imageDataUrl: images, // every photo: colors and variants show up in the script
     });
     const scriptLine = plan.estimate.lines.find((l) => l.step === 'script');
     if (script.source === 'AI' && scriptLine) {

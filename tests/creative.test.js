@@ -140,3 +140,12 @@ test('rewrite one line: same facts, same price, and never longer than the scene'
   process.env.FAL_KEY = '';
   assert.equal(await rewriteLine({ productName: 'x', lines: ['a'], index: 0, limit: 8 }), null, 'no key: nothing is invented');
 });
+
+test("the customer's problem drives the script and counts as a true fact", async () => {
+  const problem = 'أعواد القطن بتزق الشمع جوه الودن وبتعمل سدّ ووجع';
+  await withFal(() => JSON.stringify({ scenes: [1, 2, 3].map((i) => ({ visual: `v${i}`, voiceover: `سطر ${i}` })) }), async (calls) => {
+    await writeScript({ productName: 'جهاز تنظيف الودن', description: 'بينضّف الودن بالمية', problem, goal: 'PROBLEM', clipCount: 3, sceneSeconds: [8, 6, 6], style: 'UGC', voiceGender: 'MALE', imageDataUrl: [IMG] });
+    assert.ok(calls[0].body.prompt.includes(`build the hook and the story on THIS, in the buyer's everyday words): ${problem}`));
+  });
+  assert.match(factsOf({ productName: 'x', problem }), /أعواد القطن/);
+});

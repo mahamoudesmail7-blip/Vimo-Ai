@@ -6,7 +6,7 @@ import { reveal, slider, aiSteps } from '/js/motion.js';
 const MAX_PHOTOS = 4;
 const newRef = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, '');
 const blankForm = (keep = {}) => ({
-  images: [], description: '', style: 'AUTO', goal: 'SALES', aspectRatio: '9:16', voiceGender: 'MALE', music: 'none', offer: '', details: '', analysis: null, autoDesc: '', script: null,
+  images: [], description: '', style: 'AUTO', goal: 'SALES', aspectRatio: '9:16', voiceGender: 'MALE', music: 'none', offer: '', details: '', problem: '', analysis: null, autoDesc: '', script: null,
   ...keep, clientRef: newRef(),
 });
 const state = { me: null, cfg: null, quote: null, poll: null, form: blankForm() };
@@ -125,9 +125,14 @@ async function renderCreate(view) {
       ${step(1, 'صورة المنتج', `<div class="photos" id="photos"></div>
         <input type="file" id="file" accept="image/png,image/jpeg,image/webp" multiple hidden />
         <div class="hint">صورة واضحة للمنتج. تقدر تضيف لحد ${fmt(MAX_PHOTOS)} صور من زوايا مختلفة.</div>`)}
-      ${step(2, 'المنتج', `<div id="analysis"></div>
-        <textarea id="description" maxlength="1500" rows="2" placeholder="هنكتب وصف المنتج من الصورة، وتقدر تعدّله"></textarea>
-        <div class="hint" id="descHint">بنفهم المنتج من الصور، وتقدر تعدّل الوصف أو تزوّد عليه.</div>
+      ${step(2, 'المنتج', `<div class="must" role="note"><b>⚠️ مهم جدًا:</b> اشرح منتجك بالتفصيل. قولنا بيعمل إيه، وبيحل مشكلة إيه، ومين محتاجه. كل ما تشرح أكتر، الذكاء الاصطناعي هيفهم عميلك محتاج إيه ويكتب سكريبت بيبيع أكتر.</div>
+        <div id="analysis"></div>
+        <label class="label sub-label" for="description">المنتج ده بيعمل إيه؟ <span class="req">مهم</span></label>
+        <textarea id="description" maxlength="1500" rows="3" placeholder="مثلًا: جهاز تنظيف الودن بالمية. بيضخ مية دافية بهدوء جوه الودن ويطلّع الشمع المتراكم، وله 3 سرعات وراس مرنة."></textarea>
+        <div class="hint" id="descHint">بنفهم المنتج من الصور ونكتبلك أول سطر، وإنت زوّد عليه كل التفاصيل.</div>
+        <label class="label sub-label" for="problem">بيحل مشكلة إيه؟ ومين محتاجه؟ <span class="req">مهم</span></label>
+        <textarea id="problem" maxlength="800" rows="3" placeholder="مثلًا: ناس كتير بتنضّف ودنها بأعواد القطن، وده بيزق الشمع لجوه ويعمل سدّ ووجع وأحيانًا التهاب. الجهاز بينضّف من غير ما يأذي الودن، ومناسب للكبار والأطفال."></textarea>
+        <div class="err-inline" id="problemErr"></div>
         <div class="two-col">
           <div><label class="label sub-label" for="offer">السعر <span class="muted" style="font-weight:400">(اختياري)</span></label>
           <input id="offer" type="text" maxlength="200" placeholder="مثلًا: 350 جنيه بدل 700" /></div>
@@ -243,7 +248,7 @@ async function renderCreate(view) {
       if (b.dataset.seg === 'voiceGender') { f.script = null; drawScript(); }
     };
   });
-  for (const id of ['description', 'offer', 'details']) { const el = $(`#${id}`); el.value = f[id] || ''; el.oninput = () => { f[id] = el.value; }; }
+  for (const id of ['description', 'problem', 'offer', 'details']) { const el = $(`#${id}`); el.value = f[id] || ''; el.oninput = () => { f[id] = el.value; }; }
   if (f.aspectRatio !== '9:16' || f.music !== 'none') $('#advanced').open = true;
   $$('.goal-opt', view).forEach((b) => {
     b.onclick = () => {
@@ -252,10 +257,10 @@ async function renderCreate(view) {
       drawScript();
     };
   });
-  for (const id of ['offer', 'details']) $(`#${id}`).addEventListener('change', () => { if (f.script) { f.script = null; drawScript(); } });
+  for (const id of ['problem', 'offer', 'details']) $(`#${id}`).addEventListener('change', () => { if (f.script) { f.script = null; drawScript(); } });
 
   const inputs = () => ({
-    images: f.images, description: f.description, offer: f.offer, details: f.details, analysis: f.analysis || undefined,
+    images: f.images, description: f.description, problem: f.problem, offer: f.offer, details: f.details, analysis: f.analysis || undefined,
     style: f.style, goal: f.goal, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender, music: f.music,
   });
   const hasProduct = () => f.description.trim() || f.analysis?.productAr;
@@ -344,11 +349,22 @@ async function renderCreate(view) {
     drawChecks();
     reveal(box);
   }
+  let askedProblem = false;
   async function preview() {
     const err = $('#err');
     err.textContent = '';
     if (!f.images.length) { err.textContent = 'ارفع صورة المنتج الأول.'; return; }
     if (!hasProduct()) { err.textContent = 'اكتب سطر عن المنتج الأول.'; $('#description').focus(); return; }
+    // the problem the product solves makes the script: ask for it once, then let them go on without it
+    if (!f.problem.trim() && !askedProblem) {
+      askedProblem = true;
+      $('#problemErr').textContent = 'اكتب المشكلة اللي المنتج بيحلها عشان السكريبت يطلع أقوى. لو مش عايز، دوس الزرار تاني.';
+      $('#problem').classList.add('need');
+      $('#problem').focus();
+      return;
+    }
+    $('#problemErr').textContent = '';
+    $('#problem').classList.remove('need');
     const box = $('#scriptBox');
     const keep = box.innerHTML;
     box.innerHTML = '<div class="ai-box"></div>';
