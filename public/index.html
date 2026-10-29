@@ -25,8 +25,8 @@
     <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
     <div class="wrap hero-grid">
       <div class="hero-text">
-      <h1 class="reveal">حوّل صورة منتجك لـ <span class="hl">فيديو إعلاني</span> بيبيع</h1>
-      <p class="reveal">ارفع صورة المنتج بس، وVimo AI يفهمه ويكتبلك السكريبت ويطلعلك فيديو <span id="secs">24</span> ثانية بصوت وكلام مصري، جاهز لتيك توك وريلز وفيسبوك. من غير تصوير ولا مونتاج.</p>
+      <h1 class="reveal">حوّل صورة <span class="hl">أي منتج</span> لفيديو إعلاني بيبيع</h1>
+      <p class="reveal">لبس، تجميل، مطبخ، إلكترونيات، أكل… مهما كان بتبيع إيه، ارفع صورته بس وVimo AI يفهمه ويكتبلك السكريبت ويطلعلك فيديو <span id="secs">24</span> ثانية بصوت وكلام مصري، جاهز لتيك توك وريلز وفيسبوك. من غير تصوير ولا مونتاج.</p>
       <div class="cta reveal">
         <a class="btn primary" href="/auth?mode=signup">اعمل أول فيديو</a>
         <a class="btn" href="#pricing">شوف الأسعار</a>
@@ -40,7 +40,7 @@
       </div>
       <div class="demo reveal" aria-hidden="true">
         <div class="phone">
-          <div class="ph-photo"><div class="shoe"></div><div class="scanline"></div></div>
+          <div class="ph-photo" id="dmPhoto"><span class="ph-emoji" id="dmEmoji">🧴</span><div class="scanline"></div></div>
           <div class="ph-line" id="dmStage">بيشوف المنتج…</div>
           <div class="ph-chips" id="dmChips"></div>
           <div class="ph-hooks" id="dmHooks"></div>
@@ -51,17 +51,24 @@
     </div>
   </div>
 
+  <div class="cats" aria-label="أنواع المنتجات">
+    <div class="cats-track"><span>👕 لبس</span><span>👟 أحذية</span><span>👜 شنط</span><span>💄 تجميل</span><span>🌸 عطور</span><span>🧴 عناية بالبشرة</span><span>🍳 أدوات مطبخ</span><span>🏠 أدوات منزلية</span><span>🎧 إلكترونيات</span><span>📱 إكسسوارات موبايل</span><span>🧸 ألعاب أطفال</span><span>🏋️ رياضة</span><span>🍰 أكل وحلويات</span><span>⌚ ساعات وإكسسوارات</span><span>🐾 مستلزمات حيوانات</span><span>👕 لبس</span><span>👟 أحذية</span><span>👜 شنط</span><span>💄 تجميل</span><span>🌸 عطور</span><span>🧴 عناية بالبشرة</span><span>🍳 أدوات مطبخ</span><span>🏠 أدوات منزلية</span><span>🎧 إلكترونيات</span><span>📱 إكسسوارات موبايل</span><span>🧸 ألعاب أطفال</span><span>🏋️ رياضة</span><span>🍰 أكل وحلويات</span><span>⌚ ساعات وإكسسوارات</span><span>🐾 مستلزمات حيوانات</span></div>
+  </div>
+
   <section id="ai">
     <div class="wrap">
       <h2 class="reveal">الذكاء الاصطناعي بيشتغلك</h2>
-      <p class="lead reveal">أمثلة لبدايات إعلانات بيكتبها Vimo AI، كل واحدة بتقييمها.</p>
+      <p class="lead reveal">أمثلة لبدايات إعلانات لمنتجات مختلفة بيكتبها Vimo AI، كل واحدة بتقييمها.</p>
       <div class="slider reveal" id="hookSlider">
         <div class="slides">
-          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">كوتشي سليب أون</span><span class="hc-score">9/10</span></div><div class="hc-text">«رجلك بتوجعك من الجزمة كل ما تنزل؟»</div><div class="hc-why">✓ سؤال عن وجع يومي</div><div class="meter"><i style="--w:90%"></i></div></div>
-          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">شنطة يد</span><span class="hc-score">8/10</span></div><div class="hc-text">«كل حاجاتك في شنطة واحدة ومنظمة»</div><div class="hc-why">✓ مشكلة كل يوم وحلها</div><div class="meter"><i style="--w:80%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">عطر رجالي</span><span class="hc-score">9/10</span></div><div class="hc-text">«ريحتك بتفضل معاك لآخر اليوم؟»</div><div class="hc-why">✓ سؤال بيلمس حاجة كل يوم</div><div class="meter"><i style="--w:90%"></i></div></div>
           <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">كريم ترطيب</span><span class="hc-score">9/10</span></div><div class="hc-text">«بشرتك بتنشف أول ما الجو يبرد؟»</div><div class="hc-why">✓ موقف كل الناس عاشته</div><div class="meter"><i style="--w:90%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">خلاط محمول</span><span class="hc-score">8/10</span></div><div class="hc-text">«عصيرك جاهز وإنت لسه لابس»</div><div class="hc-why">✓ سرعة قدام عينك</div><div class="meter"><i style="--w:80%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">سماعة بلوتوث</span><span class="hc-score">8/10</span></div><div class="hc-text">«الدوشة دي مش هتسمعها تاني»</div><div class="hc-why">✓ مشكلة وحل</div><div class="meter"><i style="--w:80%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">لعبة أطفال</span><span class="hc-score">9/10</span></div><div class="hc-text">«ابنك هيسيب الموبايل بنفسه»</div><div class="hc-why">✓ وجع كل أم وأب</div><div class="meter"><i style="--w:90%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">شنطة يد</span><span class="hc-score">8/10</span></div><div class="hc-text">«كل حاجاتك في شنطة واحدة ومنظمة»</div><div class="hc-why">✓ مشكلة كل يوم وحلها</div><div class="meter"><i style="--w:80%"></i></div></div>
           <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">مكنسة شحن</span><span class="hc-score">8/10</span></div><div class="hc-text">«نضّفت الشقة كلها من غير سلك»</div><div class="hc-why">✓ نتيجة قدام عينك</div><div class="meter"><i style="--w:80%"></i></div></div>
-          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">ساعة رجالي</span><span class="hc-score">7/10</span></div><div class="hc-text">«الساعة دي بتخلّي أي لبس شيك»</div><div class="hc-why">✓ إحساس وشكل</div><div class="meter"><i style="--w:70%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">كوتشي سليب أون</span><span class="hc-score">9/10</span></div><div class="hc-text">«رجلك بتوجعك من الجزمة كل ما تنزل؟»</div><div class="hc-why">✓ سؤال عن وجع يومي</div><div class="meter"><i style="--w:90%"></i></div></div>
         </div>
         <button class="arrow prev" type="button" aria-label="السابق">›</button>
         <button class="arrow next" type="button" aria-label="التالي">‹</button>
@@ -133,16 +140,35 @@
   const stage = document.getElementById('dmStage');
   const chipsEl = document.getElementById('dmChips');
   const hooksEl = document.getElementById('dmHooks');
-  const DEMO = [
-    () => { stage.textContent = 'بيشوف المنتج…'; chipsEl.innerHTML = ''; hooksEl.innerHTML = ''; },
-    () => { stage.textContent = 'كوتشي رجالي سليب أون'; chipsEl.innerHTML = ['رمادي', 'أسود', 'كحلي', '✓ من غير رباط'].map((c, i) => `<span style="--d:${i * 120}ms">${c}</span>`).join(''); },
-    () => { stage.textContent = 'بيكتب 5 هوكات ويقيّمهم…'; hooksEl.innerHTML = [['رجلك بتوجعك كل ما تنزل؟', 9], ['تلبسه في ثانية من غير رباط', 8], ['تلات ألوان لكل لبس', 7]].map(([t, n], i) => `<div class="${i ? '' : 'best'}" style="--d:${i * 200}ms"><b>${n}/10</b>${t}</div>`).join(''); },
-    () => { stage.textContent = '✓ السكريبت جاهز تراجعه'; },
+  const photo = document.getElementById('dmPhoto');
+  const emoji = document.getElementById('dmEmoji');
+  // one product after another, so it is clear any product works
+  const PRODUCTS = [
+    { e: '🧴', bg: '#1f3b4d', name: 'كريم ترطيب للبشرة', chips: ['أبيض', '✓ 50 مل', '✓ عبوة بمضخة'], hooks: [['بشرتك بتنشف أول ما الجو يبرد؟', 9], ['ترطيب يكفيك اليوم كله', 8], ['جربتي كل حاجة ومفيش فايدة؟', 7]] },
+    { e: '🎧', bg: '#2b2346', name: 'سماعة بلوتوث', chips: ['أسود', 'أبيض', '✓ علبة شحن'], hooks: [['الدوشة دي مش هتسمعها تاني', 9], ['مكالماتك واضحة حتى في الشارع', 8], ['سلك السماعة اتقطع تاني؟', 7]] },
+    { e: '🍳', bg: '#4a2a1d', name: 'طاسة جرانيت', chips: ['رمادي', '✓ يد خشب', '✓ 28 سم'], hooks: [['البيض لازق في الطاسة كل يوم؟', 9], ['بتطبخي بنقطة زيت بس', 8], ['طاسة تعيش معاكي سنين', 6]] },
+    { e: '👗', bg: '#4a1d3a', name: 'فستان صيفي', chips: ['أحمر', 'كحلي', 'بيج'], hooks: [['مش لاقية حاجة تلبسيها في الصيف؟', 9], ['خفيف ومريح وشكله شيك', 8], ['تلات ألوان لكل مشوار', 7]] },
+    { e: '🧸', bg: '#3d3a1d', name: 'لعبة أطفال تعليمية', chips: ['ملونة', '✓ قطع كبيرة', '✓ 3 سنين+'], hooks: [['ابنك هيسيب الموبايل بنفسه', 9], ['بيلعب ويتعلم في نفس الوقت', 8], ['هدية تفرّح أي طفل', 7]] },
+    { e: '👟', bg: '#1d3a2f', name: 'كوتشي سليب أون', chips: ['رمادي', 'أسود', 'كحلي'], hooks: [['رجلك بتوجعك كل ما تنزل؟', 9], ['تلبسه من غير رباط', 8], ['تلات ألوان لكل لبس', 7]] },
   ];
+  let k = 0;
+  const show = (p) => {
+    const at = (list, f) => list.map((x, i) => f(x, i)).join('');
+    return [
+      () => { photo.style.background = `radial-gradient(circle at 50% 40%, ${p.bg}, #14141f)`; emoji.textContent = p.e; emoji.classList.remove('in'); void emoji.offsetWidth; emoji.classList.add('in'); photo.classList.add('scanning'); stage.textContent = 'بيشوف المنتج…'; chipsEl.innerHTML = ''; hooksEl.innerHTML = ''; },
+      () => { photo.classList.remove('scanning'); stage.textContent = p.name; chipsEl.innerHTML = at(p.chips, (c, i) => `<span style="--d:${i * 120}ms">${c}</span>`); },
+      () => { stage.textContent = 'بيكتب 5 هوكات ويقيّمهم…'; hooksEl.innerHTML = at(p.hooks, ([t, n], i) => `<div class="${i ? '' : 'best'}" style="--d:${i * 200}ms"><b>${n}/10</b>${t}</div>`); },
+      () => { stage.textContent = '✓ السكريبت جاهز تراجعه'; },
+    ];
+  };
+  let steps = show(PRODUCTS[0]);
   let step = 0;
-  const play = () => { DEMO[step % DEMO.length](); step++; };
+  const play = () => {
+    if (step === steps.length) { k = (k + 1) % PRODUCTS.length; steps = show(PRODUCTS[k]); step = 0; }
+    steps[step++]();
+  };
   play();
-  if (!calm()) setInterval(play, 2200); else { DEMO[1](); DEMO[2](); DEMO[3](); }
+  if (!calm()) setInterval(play, 2000); else { steps.forEach((f) => f()); }
   document.getElementById('brand').innerHTML = LOGO;
   document.getElementById('year').textContent = new Date().getFullYear();
   api('GET', '/api/showcase').then(({ videos }) => {
