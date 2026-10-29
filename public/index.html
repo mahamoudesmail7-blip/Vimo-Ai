@@ -12,6 +12,7 @@
   <div class="wrap">
     <a class="brand" href="/" id="brand"></a>
     <nav>
+      <a class="btn small hide-sm hidden" href="#showcase" id="workLink">شغلنا</a>
       <a class="btn small hide-sm" href="#how">إزاي بيشتغل</a>
       <a class="btn small hide-sm" href="#pricing">الأسعار</a>
       <a class="btn small" href="/auth">دخول</a>
@@ -55,6 +56,19 @@
     <div class="cats-track"><span>👕 لبس</span><span>👟 أحذية</span><span>👜 شنط</span><span>💄 تجميل</span><span>🌸 عطور</span><span>🧴 عناية بالبشرة</span><span>🍳 أدوات مطبخ</span><span>🏠 أدوات منزلية</span><span>🎧 إلكترونيات</span><span>📱 إكسسوارات موبايل</span><span>🧸 ألعاب أطفال</span><span>🏋️ رياضة</span><span>🍰 أكل وحلويات</span><span>⌚ ساعات وإكسسوارات</span><span>🐾 مستلزمات حيوانات</span><span>👕 لبس</span><span>👟 أحذية</span><span>👜 شنط</span><span>💄 تجميل</span><span>🌸 عطور</span><span>🧴 عناية بالبشرة</span><span>🍳 أدوات مطبخ</span><span>🏠 أدوات منزلية</span><span>🎧 إلكترونيات</span><span>📱 إكسسوارات موبايل</span><span>🧸 ألعاب أطفال</span><span>🏋️ رياضة</span><span>🍰 أكل وحلويات</span><span>⌚ ساعات وإكسسوارات</span><span>🐾 مستلزمات حيوانات</span></div>
   </div>
 
+  <section id="showcase" class="hidden">
+    <div class="wrap">
+      <h2 class="reveal">شوف شغلنا</h2>
+      <p class="lead reveal">فيديوهات حقيقية اتعملت على Vimo AI، من صورة لفيديو في دقايق.</p>
+    </div>
+    <div class="slider work-slider" id="gallerySlider">
+      <div class="slides" id="gallery"></div>
+      <button class="arrow prev" type="button" aria-label="السابق">›</button>
+      <button class="arrow next" type="button" aria-label="التالي">‹</button>
+      <div class="dots"></div>
+    </div>
+  </section>
+
   <section id="ai">
     <div class="wrap">
       <h2 class="reveal">الذكاء الاصطناعي بيشتغلك</h2>
@@ -89,18 +103,6 @@
     </div>
   </section>
 
-  <section id="showcase" class="hidden">
-    <div class="wrap">
-      <h2 class="reveal">شوف شغلنا</h2>
-      <p class="lead reveal">فيديوهات حقيقية اتعملت على Vimo AI، من صورة لفيديو في دقايق.</p>
-      <div class="slider video-slider" id="gallerySlider">
-        <div class="slides" id="gallery"></div>
-        <button class="arrow prev" type="button" aria-label="السابق">›</button>
-        <button class="arrow next" type="button" aria-label="التالي">‹</button>
-        <div class="dots"></div>
-      </div>
-    </div>
-  </section>
 
   <section id="pricing">
     <div class="wrap">
@@ -173,12 +175,29 @@
   document.getElementById('year').textContent = new Date().getFullYear();
   api('GET', '/api/showcase').then(({ videos }) => {
     if (!videos.length) return;
-    document.getElementById('gallery').innerHTML = videos.map((v) => `
-      <div class="slide vcard"><div class="media ${v.aspectRatio === '16:9' ? 'wide' : ''}"><video src="${v.videoUrl}" poster="${v.imageUrl}" controls playsinline muted loop preload="metadata"></video></div>
-      <div class="body"><div class="title">${esc(v.productName)}</div></div></div>`).join('');
+    const gallery = document.getElementById('gallery');
+    // the first frame of the video is the cover, with a play button on top (like a reel)
+    gallery.innerHTML = videos.map((v) => `
+      <div class="slide work ${v.aspectRatio === '16:9' ? 'wide' : ''}">
+        <video src="${v.videoUrl}#t=0.6" playsinline preload="metadata" aria-label="${esc(v.productName)}"></video>
+        <button type="button" class="play" aria-label="شغّل الفيديو"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+        <span class="work-name">${esc(v.productName)}</span>
+      </div>`).join('');
+    const stopAll = (except) => gallery.querySelectorAll('.work').forEach((w) => { if (w !== except) { w.querySelector('video').pause(); w.classList.remove('playing'); } });
+    gallery.querySelectorAll('.work').forEach((w) => {
+      const v = w.querySelector('video');
+      const toggle = () => {
+        if (v.paused) { stopAll(w); v.muted = false; v.controls = true; v.play().catch(() => {}); w.classList.add('playing'); }
+        else { v.pause(); w.classList.remove('playing'); }
+      };
+      w.querySelector('.play').onclick = toggle;
+      v.onended = () => { w.classList.remove('playing'); v.controls = false; };
+      v.onpause = () => w.classList.remove('playing');
+    });
     document.getElementById('showcase').classList.remove('hidden');
+    document.getElementById('workLink').classList.remove('hidden');
     reveal();
-    slider(document.getElementById('gallerySlider'), { every: 6000 });
+    slider(document.getElementById('gallerySlider'), { every: 5000, playVideos: false });
   }).catch(() => {});
   const cfg = await api('GET', '/api/config').catch(() => null);
   if (cfg) {
