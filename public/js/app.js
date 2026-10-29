@@ -87,14 +87,16 @@ const styleCard = ([v, t, d, pts], f) => `
 
 // One finished sample video per style (picked by the admin), shown inside each card.
 async function drawStyleSamples(view) {
-  const { videos = [] } = await api('GET', '/api/showcase').catch(() => ({}));
-  const pick = { AUTO: videos[0] };
-  for (const v of videos) pick[v.style] ||= v;
+  const { videos = [], samples = {} } = await api('GET', '/api/showcase').catch(() => ({}));
+  // the example the admin chose for each style wins, then a starred customer video of that style
+  const pick = { ...samples };
+  for (const v of videos) if (v.style) pick[v.style] ||= v;
+  pick.AUTO ||= pick.STUDIO || videos[0]; // a customer's first «تلقائي» video is made in the studio look
   for (const box of $$('[data-sample]', view)) {
     const v = pick[box.dataset.sample];
     if (!v) continue;
     box.hidden = false;
-    box.innerHTML = `<video src="${v.videoUrl}" poster="${v.imageUrl}" muted loop playsinline autoplay preload="metadata"></video><button type="button" class="sample-play" aria-label="شوف المثال بالصوت">▶ شوف مثال</button>`;
+    box.innerHTML = `<video src="${v.videoUrl}${v.imageUrl ? '' : '#t=0.6'}" ${v.imageUrl ? `poster="${v.imageUrl}"` : ''} muted loop playsinline autoplay preload="metadata"></video><button type="button" class="sample-play" aria-label="شوف المثال بالصوت">▶ شوف مثال</button>`;
     $('.sample-play', box).onclick = (e) => { e.stopPropagation(); playSample(v); };
   }
 }

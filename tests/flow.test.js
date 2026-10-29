@@ -514,6 +514,26 @@ test('the admin uploads videos straight to the landing page gallery', { skip }, 
   r = await anon('GET', `/api/showcase/clip/${id}`, undefined, { Range: 'bytes=0-3' });
   assert.equal(r.status, 206);
 
+  // a sample for the «استوديو» card on the create page, kept out of «شوف شغلنا»
+  r = await admin('POST', `/api/admin/showcase-videos?title=${encodeURIComponent('عطر')}&style=STUDIO&gallery=0`, clip, { 'Content-Type': 'video/mp4' });
+  assert.equal(r.status, 201);
+  assert.equal(r.data.style, 'STUDIO');
+  assert.equal(r.data.inGallery, false);
+  const sample = r.data.id;
+  r = await anon('GET', '/api/showcase');
+  assert.equal(r.data.samples.STUDIO.videoUrl, `/api/showcase/clip/${sample}`);
+  assert.equal(r.data.samples.UGC, undefined);
+  assert.equal(r.data.videos.some((v) => v.id === `u${sample}`), false, 'not in the gallery');
+  assert.equal((await user('PATCH', `/api/admin/showcase-videos/${sample}`, { style: 'UGC' })).status, 403);
+  r = await admin('PATCH', `/api/admin/showcase-videos/${sample}`, { style: 'UGC', inGallery: true });
+  assert.equal(r.data.style, 'UGC');
+  r = await anon('GET', '/api/showcase');
+  assert.equal(r.data.samples.UGC.productName, 'عطر');
+  assert.equal(r.data.samples.STUDIO, undefined);
+  assert.equal(r.data.videos[0].id, `u${sample}`, 'now in the gallery too');
+  assert.equal((await admin('PATCH', '/api/admin/showcase-videos/99999', { style: 'UGC' })).status, 404);
+  assert.equal((await admin('DELETE', `/api/admin/showcase-videos/${sample}`)).status, 200);
+
   r = await admin('DELETE', `/api/admin/showcase-videos/${id}`);
   assert.equal(r.status, 200);
   assert.equal((await anon('GET', `/api/showcase/clip/${id}`)).status, 404);

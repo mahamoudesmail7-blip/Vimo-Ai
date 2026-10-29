@@ -12,12 +12,17 @@ router.get('/', asyncRoute(async (req, res) => {
     where: { showcase: true, status: 'COMPLETED' }, orderBy: { finished_at: 'desc' }, take: 24,
     select: { id: true, product_name: true, aspect_ratio: true, style: true },
   });
-  const uploaded = await prisma.showcaseVideo.findMany({ orderBy: { created_at: 'desc' }, take: 24 });
-  res.json({ videos: [
+  const uploaded = await prisma.showcaseVideo.findMany({ orderBy: { created_at: 'desc' }, take: 40 });
+  const clip = (u) => ({ id: `u${u.id}`, productName: u.title, aspectRatio: u.aspect_ratio, style: u.style, videoUrl: `/api/showcase/clip/${u.id}`, imageUrl: null });
+  res.json({
+    // the example for each ad style on the create page (the newest upload marked for it)
+    samples: Object.fromEntries(['AUTO', 'UGC', 'STUDIO', 'SHOWCASE'].map((st) => [st, uploaded.find((u) => u.style === st)]).filter(([, u]) => u).map(([st, u]) => [st, clip(u)])),
+    videos: [
     // the admin's own uploads first, then the customer videos marked with ☆
-    ...uploaded.map((u) => ({ id: `u${u.id}`, productName: u.title, aspectRatio: u.aspect_ratio, style: null, videoUrl: `/api/showcase/clip/${u.id}`, imageUrl: null })),
+    ...uploaded.filter((u) => u.in_gallery).slice(0, 24).map(clip),
     ...rows.map((r) => ({ id: r.id, productName: r.product_name, aspectRatio: r.aspect_ratio, style: r.style === 'CINEMATIC' ? 'SHOWCASE' : r.style, videoUrl: `/api/showcase/${r.id}/video`, imageUrl: `/api/showcase/${r.id}/image` })),
-  ] });
+    ],
+  });
 }));
 
 router.get('/clip/:id', asyncRoute(async (req, res) => {
