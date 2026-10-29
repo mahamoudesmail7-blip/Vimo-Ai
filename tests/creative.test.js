@@ -140,3 +140,53 @@ test('rewrite one line: same facts, same price, and never longer than the scene'
   process.env.FAL_KEY = '';
   assert.equal(await rewriteLine({ productName: 'x', lines: ['a'], index: 0, limit: 8 }), null, 'no key: nothing is invented');
 });
+
+test("the customer's problem drives the script and counts as a true fact", async () => {
+  const problem = 'أعواد القطن بتزق الشمع جوه الودن وبتعمل سدّ ووجع';
+  await withFal(() => JSON.stringify({ scenes: [1, 2, 3].map((i) => ({ visual: `v${i}`, voiceover: `سطر ${i}` })) }), async (calls) => {
+    await writeScript({ productName: 'جهاز تنظيف الودن', description: 'بينضّف الودن بالمية', problem, goal: 'PROBLEM', clipCount: 3, sceneSeconds: [8, 6, 6], style: 'UGC', voiceGender: 'MALE', imageDataUrl: [IMG] });
+    assert.ok(calls[0].body.prompt.includes(`build the hook and the story on THIS, in the buyer's everyday words): ${problem}`));
+  });
+  assert.match(factsOf({ productName: 'x', problem }), /أعواد القطن/);
+});
+
+test('review: English, technical and very long words are flagged as hard to say', () => {
+  const r = checkScript({ scenes: lines('الجهاز ده متطور وفيه تكنولوجيا AI وهتستخدميهولنا'), facts: 'جهاز' });
+  const hard = r.issues.filter((x) => x.kind === 'HARD_WORD').map((x) => x.message).join(' ');
+  assert.match(hard, /AI/);
+  assert.match(hard, /«متطور» \(قول «حديث»\)/);
+  assert.match(hard, /وهتستخدميهولنا/);
+  assert.ok(!r.passed.includes('كلام سهل في النطق'));
+  // an English product name the seller wrote is fine, and so is an everyday "جدا"
+  assert.deepEqual(kinds(checkScript({ scenes: lines('السماعة دي Anker وحلوة جدا'), facts: 'سماعة Anker' })), []);
+});
+
+test('with an OpenAI key the script goes to ChatGPT with the photos, and its review findings are fixed', async () => {
+  process.env.OPENAI_API_KEY = 'sk-test';
+  process.env.OPENAI_MODEL = 'gpt-4o';
+  const calls = [];
+  const { setFetch: setScriptFetch } = await import('../src/services/script.js');
+  setScriptFetch(async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    calls.push({ url, body });
+    const content = calls.length === 1
+      ? JSON.stringify({ scenes: [1, 2, 3].map((i) => ({ visual: `v${i}`, voiceover: i === 2 ? 'الجهاز ده متطور جدا' : `سطر ${i}` })) })
+      : JSON.stringify({ lines: ['سطر واحد', 'الجهاز ده حديث وسهل', 'سطر تلاتة'] });
+    return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  try {
+    const s = await writeScript({ productName: 'جهاز', clipCount: 3, sceneSeconds: [8, 6, 6], style: 'UGC', voiceGender: 'MALE', imageDataUrl: [IMG] });
+    assert.equal(calls[0].url, 'https://api.openai.com/v1/chat/completions');
+    assert.equal(calls[0].body.model, 'gpt-4o');
+    assert.equal(calls[0].body.messages[1].content[1].image_url.url, IMG);
+    assert.match(calls[0].body.messages[0].content, /A video voice will SAY every line/);
+    assert.match(calls[0].body.messages[1].content[0].text, /ONE doubt that stops them/);
+    assert.equal(calls[0].body.temperature, 0.8);
+    assert.match(calls[1].body.messages[0].content, /Pronunciation comes first/);
+    assert.equal(s.scenes[1].voiceover, 'الجهاز ده حديث وسهل');
+  } finally {
+    setScriptFetch(null);
+    process.env.OPENAI_API_KEY = '';
+    delete process.env.OPENAI_MODEL;
+  }
+});

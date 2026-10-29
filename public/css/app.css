@@ -314,3 +314,10 @@ details.advanced .adv-body { padding-top: 22px; display: grid; gap: 22px; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* the "explain your product" notice */
+.must { border: 1.5px solid var(--bad); background: color-mix(in srgb, var(--bad) 9%, transparent); color: var(--text); border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.7; margin-bottom: 12px; }
+.must b { color: var(--bad); }
+.req { color: var(--bad); font-size: 12px; font-weight: 700; margin-inline-start: 6px; }
+.err-inline { color: var(--bad); font-size: 13px; margin-top: 6px; min-height: 0; }
+textarea.need { border-color: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 18%, transparent); }

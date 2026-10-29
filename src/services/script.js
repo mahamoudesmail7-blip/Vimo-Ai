@@ -154,16 +154,17 @@ export function userScript(input, clipCount, { sceneSeconds, pace } = {}) {
 const SYSTEM = [
   'You are the best direct-response creative director in Egypt. You make UGC video ads for TikTok, Reels and Facebook that stop the scroll and sell, and you direct realistic, believable footage.',
   'You write spoken lines the way real Egyptians talk (عامية مصرية), never formal Arabic and never translated-sounding.',
+  'A video voice will SAY every line, so you only use words it cannot get wrong: short, common words Egyptians say every day, no English, no technical or formal words, no long words with many prefixes and suffixes stuck together (split them: "هتستعمله" not "وهتستخدميهولنا").',
   'The lines sound like a real person, not an ad and not an AI: simple everyday words, short sentences, nothing fancy.',
   'You reply with one JSON object only, no markdown.',
 ].join(' ');
 
 /** Everything the ad may say as a fact: the seller's words and what the photos clearly show. */
-export function factsOf({ productName, description, details, analysis }) {
-  return [productName, description, details, ...(analysis?.confirmed || []), ...(analysis?.colors || [])].filter(Boolean).join(' . ');
+export function factsOf({ productName, description, details, problem, analysis }) {
+  return [productName, description, details, problem, ...(analysis?.confirmed || []), ...(analysis?.colors || [])].filter(Boolean).join(' . ');
 }
 
-function scriptRequest({ productName, description, details, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech', analysis = null }) {
+function scriptRequest({ productName, description, details, problem, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech', analysis = null }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
   const secs = Array.from({ length: clipCount }, (_, i) => sceneSeconds?.[i] || env.clipSeconds());
   const voiceover = mode === 'voiceover' || mode === 'hybrid';
@@ -172,6 +173,7 @@ function scriptRequest({ productName, description, details, offer, style, goal, 
     `Product name: ${productName}`,
     description ? `Seller's description: ${description}` : '',
     details ? `Extra details from the seller (true facts): ${details}` : '',
+    problem ? `The problem this product solves / what the buyer wants, in the seller's words (build the hook and the story on THIS, in the buyer's everyday words): ${problem}` : '',
     analysis ? `What the photos clearly show (confirmed): ${[analysis.productAr, ...analysis.confirmed].filter(Boolean).join('; ') || 'nothing more'}` : '',
     analysis?.colors?.length > 1 ? `Color variants in the photos (show and name ALL of them in one scene): ${analysis.colors.join('، ')}` : '',
     analysis?.unknown?.length ? `NOT known, never say anything about these: ${analysis.unknown.join('; ')}` : '',
@@ -183,6 +185,7 @@ function scriptRequest({ productName, description, details, offer, style, goal, 
     '',
     'STEP 1. Study ALL the attached product photos closely before writing anything:',
     '- what the product really is, who buys it, and the everyday moments it makes better (e.g. for shoes: work, outings, long walks; for a kitchen tool: cooking for the family);',
+    '- think like the buyer: who exactly they are, the pain or wish that makes them stop (use the seller\'s problem text when given), and the ONE doubt that stops them from ordering (price? does it really work? quality?). The ad speaks to that pain and answers that doubt with a true fact;',
     '- the variants the photos show: if they show the same product in several colors or models, the ad says how many and names the colors in simple Egyptian words (e.g. "متوفرة بتلات ألوان: رمادي وأسود وكحلي");',
     '- exactly how it is physically held and used (which hand, which part touches the body or the object, its size compared to a hand);',
     '- its exact look: shape, proportions, colors, materials, every visible part, logo and label text.',
@@ -233,7 +236,7 @@ export function parseJsonObject(text) {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-async function askOpenAi(key, user, imageDataUrl, system = SYSTEM) {
+async function askOpenAi(key, user, imageDataUrl, system = SYSTEM, temperature = 0.4) {
   const content = [{ type: 'text', text: user }];
   for (const url of [].concat(imageDataUrl || [])) content.push({ type: 'image_url', image_url: { url } });
   const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
@@ -241,6 +244,8 @@ async function askOpenAi(key, user, imageDataUrl, system = SYSTEM) {
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: env.openAiModel(),
+      // reasoning models (o-series, gpt-5) only take the default temperature
+      ...(/^gpt-4/.test(env.openAiModel()) ? { temperature } : {}),
       response_format: { type: 'json_object' },
       messages: [{ role: 'system', content: system }, { role: 'user', content }],
     }),
@@ -253,7 +258,7 @@ async function askOpenAi(key, user, imageDataUrl, system = SYSTEM) {
 /** One vision-model call (OpenAI when its key is set, else an LLM on fal); returns the raw reply text. */
 export async function askVision(user, imageDataUrls, system, temperature = 0.4) {
   const key = env.openAiKey();
-  return key ? askOpenAi(key, user, imageDataUrls, system) : askFal(user, imageDataUrls, system, temperature);
+  return key ? askOpenAi(key, user, imageDataUrls, system, temperature) : askFal(user, imageDataUrls, system, temperature);
 }
 
 async function askFal(user, imageDataUrl, system = SYSTEM, temperature = 0.8) {
@@ -273,6 +278,7 @@ const PROOFREAD = [
   'Fix every line so that: it is correct, natural Egyptian as people really say it; every sentence is complete and makes sense; it uses only common everyday words that are easy to pronounce (replace rare, formal or hard words with simple ones); it sounds like a real person, not an ad and not an AI.',
   'Pick the word an Egyptian really uses (e.g. "نعلها طري" not "نعلها ناعم", "جزمة" or "كوتشي" not "حذاء"). Never repeat the same word twice close together. A price reads like "سعرها خمس مية جنيه بس، بدل تمن مية": hundreds as two words, never a ب stuck to the number, never "بخصم خمسمية". Remove any made-up number or time that is not in the seller\'s description.',
   'Keep the meaning, the order and the facts. Never add a feature, number, brand, guarantee or price that is not already in the line. Prices and numbers stay written as Egyptian words.',
+  'Pronunciation comes first: a video voice reads these lines, so swap any word it could stumble on (English, technical, formal, rare, longer than about 9 letters, or several prefixes/suffixes stuck together) for a short common Egyptian word with the same meaning.',
   'Keep each line at or under its word limit.',
   'Then, for the voice only, write each corrected line again in "spoken" with Arabic diacritics (تشكيل) on the words a voice could read wrong (e.g. "شَنطِتك", "هيِوَفّر"); leave every other word and all letters exactly the same.',
   'Reply with one JSON object only: {"lines": [string, ...], "spoken": [string, ...]} with the same number of lines in both.',
@@ -329,12 +335,12 @@ function syncHook(script) {
  * pass, the automatic review, and one more fixing pass if the review found
  * problems. `checks` says what was verified and what is still wrong.
  */
-export async function writeScript({ productName, description, details, offer, style, goal, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode, analysis = null }) {
+export async function writeScript({ productName, description, details, problem, offer, style, goal, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode, analysis = null }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
-  const facts = factsOf({ productName, description, details, analysis });
+  const facts = factsOf({ productName, description, details, problem, analysis });
   const review = (script) => ({ ...script, checks: checkScript({ scenes: script.scenes, limits, offer, facts }) });
   if (!env.openAiKey() && !env.falKey()) return review(templateScript({ productName, description, offer, clipCount, sceneSeconds, pace }));
-  const user = scriptRequest({ productName, description, details, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode, analysis });
+  const user = scriptRequest({ productName, description, details, problem, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode, analysis });
   try {
     const parsed = normalize(parseJsonObject(await askVision(user, imageDataUrl, SYSTEM, 0.8)), clipCount, limits);
     if (!parsed) throw new Error('script JSON missing scenes');
@@ -360,12 +366,13 @@ const REWRITE = [
 ].join(' ');
 
 /** A fresh version of one line; null when the model is not available or fails. */
-export async function rewriteLine({ productName, description, details, offer, goal, analysis, lines, index, limit, imageDataUrl }) {
+export async function rewriteLine({ productName, description, details, problem, offer, goal, analysis, lines, index, limit, imageDataUrl }) {
   if (!env.openAiKey() && !env.falKey()) return null;
   const role = index === 0 ? 'the hook (first words must stop the scroll)' : index === lines.length - 1 ? 'the offer and the call to order' : 'the benefits, with the product in use';
   const user = [
     GOAL_DIRECTION[goal] || GOAL_DIRECTION.SALES,
-    `True facts: ${factsOf({ productName, description, details, analysis })}`,
+    `True facts: ${factsOf({ productName, description, details, problem, analysis })}`,
+    problem ? `The buyer's problem: ${problem}` : '',
     offer ? `Price/offer, said exactly as: "${speakOffer(offer)}"` : 'No price was given: never say a price.',
     'The ad:',
     ...lines.map((l, i) => `${i + 1}. ${i === index ? '>>> ' : ''}${l}`),
