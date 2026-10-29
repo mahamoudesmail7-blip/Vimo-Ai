@@ -130,16 +130,16 @@ async function renderCreate(view) {
       ${step(2, 'المنتج', `<div class="must" role="note"><b>⚠️ مهم جدًا:</b> اشرح منتجك بالتفصيل. قولنا بيعمل إيه، وبيحل مشكلة إيه، ومين محتاجه. كل ما تشرح أكتر، الذكاء الاصطناعي هيفهم عميلك محتاج إيه ويكتب سكريبت بيبيع أكتر.</div>
         <div id="analysis"></div>
         <label class="label sub-label" for="description">المنتج ده بيعمل إيه؟ <span class="req">مهم</span></label>
-        <textarea id="description" maxlength="1500" rows="3" placeholder="مثلًا: جهاز تنظيف الودن بالمية. بيضخ مية دافية بهدوء جوه الودن ويطلّع الشمع المتراكم، وله 3 سرعات وراس مرنة."></textarea>
+        <textarea id="description" maxlength="1500" rows="3" placeholder="اكتب منتجك بيعمل إيه بالظبط: بيتكون من إيه، بيتستخدم إزاي، وإيه اللي يميزه عن غيره."></textarea>
         <div class="hint" id="descHint">بنفهم المنتج من الصور ونكتبلك أول سطر، وإنت زوّد عليه كل التفاصيل.</div>
         <label class="label sub-label" for="problem">بيحل مشكلة إيه؟ ومين محتاجه؟ <span class="req">مهم</span></label>
-        <textarea id="problem" maxlength="800" rows="3" placeholder="مثلًا: ناس كتير بتنضّف ودنها بأعواد القطن، وده بيزق الشمع لجوه ويعمل سدّ ووجع وأحيانًا التهاب. الجهاز بينضّف من غير ما يأذي الودن، ومناسب للكبار والأطفال."></textarea>
+        <textarea id="problem" maxlength="800" rows="3" placeholder="إيه المشكلة اللي بيحلها أو الحاجة اللي عميلك نفسه فيها؟ ومين أكتر حد محتاجه؟ وإيه اللي هيتغير في يومه لما يجرّبه؟"></textarea>
         <div class="err-inline" id="problemErr"></div>
         <div class="two-col">
           <div><label class="label sub-label" for="offer">السعر <span class="muted" style="font-weight:400">(اختياري)</span></label>
           <input id="offer" type="text" maxlength="200" placeholder="مثلًا: 350 جنيه بدل 700" /></div>
           <div><label class="label sub-label" for="details">تفاصيل إضافية <span class="muted" style="font-weight:400">(اختياري)</span></label>
-          <input id="details" type="text" maxlength="500" placeholder="مثلًا: مقاسات من 40 لـ 45، توصيل لكل المحافظات" /></div>
+          <input id="details" type="text" maxlength="500" placeholder="مثلًا: المقاسات، الألوان، الضمان، التوصيل" /></div>
         </div>
         <div class="hint">مش هنقول سعر أو عرض أو ميزة إنت ما كتبتهاش.</div>`)}
       ${step(3, 'شكل الإعلان', `<div class="styles" role="radiogroup">${STYLE_OPTS.map((o) => styleCard(o, f)).join('')}</div>`)}
