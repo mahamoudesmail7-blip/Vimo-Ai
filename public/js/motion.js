@@ -19,7 +19,7 @@ export function reveal(root = document) {
  * dots and arrows follow it, and it moves to the next slide every `every` ms
  * until the visitor touches it. Videos play (muted) only on the visible slide.
  */
-export function slider(box, { every = 4500 } = {}) {
+export function slider(box, { every = 4500, playVideos = true } = {}) {
   const track = box.querySelector('.slides');
   const slides = [...track.children];
   if (!slides.length) return;
@@ -42,7 +42,7 @@ export function slider(box, { every = 4500 } = {}) {
     slides.forEach((s, i) => {
       s.classList.toggle('active', i === index);
       const v = s.querySelector('video');
-      if (v) { if (i === index && !calm()) { v.muted = true; v.play().catch(() => {}); } else v.pause(); }
+      if (v && playVideos) { if (i === index && !calm()) { v.muted = true; v.play().catch(() => {}); } else v.pause(); }
     });
     if (dots) [...dots.children].forEach((d, i) => d.classList.toggle('on', i === index));
   };
@@ -55,7 +55,7 @@ export function slider(box, { every = 4500 } = {}) {
   box.querySelector('.next')?.addEventListener('click', () => { stop(); go(index + 1); });
   let raf = 0;
   track.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(mark); }, { passive: true });
-  ['pointerdown', 'touchstart', 'wheel'].forEach((ev) => track.addEventListener(ev, stop, { passive: true }));
+  ['pointerdown', 'touchstart', 'wheel', 'play'].forEach((ev) => track.addEventListener(ev, stop, { passive: true, capture: true }));
   if (!calm() && slides.length > 1) timer = setInterval(() => { if (!document.hidden) go(index + 1); }, every);
   mark();
 }

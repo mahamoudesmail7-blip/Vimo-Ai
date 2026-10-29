@@ -64,7 +64,8 @@ function client() {
       if (preview.status === 200) body = { ...body, script: { product: preview.data.product, scenes: preview.data.scenes } };
     }
     if (body?.noScript) { body = { ...body }; delete body.noScript; }
-    const res = await fetch(base + path, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { cookie } : {}), ...headers }, body: body ? JSON.stringify(body) : undefined });
+    const raw = Buffer.isBuffer(body); // a file upload goes as the request body itself
+    const res = await fetch(base + path, { method, headers: { ...(body && !raw ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { cookie } : {}), ...headers }, body: raw ? body : body ? JSON.stringify(body) : undefined });
     const set = res.headers.get('set-cookie');
     if (set) cookie = set.split(';')[0];
     const type = res.headers.get('content-type') || '';
@@ -481,4 +482,41 @@ test('script first: photo analysis, free review, and no paid video before the cu
   assert.equal(r.status, 400);
   assert.equal(r.data.error, 'SCRIPT_REQUIRED');
   assert.equal(fake.submitted.length, before, 'nothing was sent to the video engine');
+});
+
+test('the admin uploads videos straight to the landing page gallery', { skip }, async () => {
+  const admin = client();
+  const user = client();
+  await admin('POST', '/api/auth/login', { email: 'boss@test.dev', password: 'secret123' });
+  await user('POST', '/api/auth/signup', { name: 'Hala', email: 'hala.gallery@test.dev', password: 'secret123' });
+  const clip = Buffer.from('fake mp4 bytes for the gallery');
+
+  let r = await user('POST', '/api/admin/showcase-videos?title=x', clip, { 'Content-Type': 'video/mp4' });
+  assert.equal(r.status, 403, 'customers cannot upload');
+  r = await admin('POST', '/api/admin/showcase-videos?title=x', Buffer.from('x'), { 'Content-Type': 'image/png' });
+  assert.equal(r.status, 400, 'only videos');
+  r = await admin('POST', '/api/admin/showcase-videos', clip, { 'Content-Type': 'video/mp4' });
+  assert.equal(r.status, 400, 'a title is needed');
+
+  r = await admin('POST', `/api/admin/showcase-videos?title=${encodeURIComponent('كريم ترطيب')}&ratio=9:16`, clip, { 'Content-Type': 'video/mp4' });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  const id = r.data.id;
+
+  // visitors see it first in «شوف شغلنا», and can play it (with seeking)
+  const anon = client();
+  r = await anon('GET', '/api/showcase');
+  assert.equal(r.data.videos[0].productName, 'كريم ترطيب');
+  assert.equal(r.data.videos[0].videoUrl, `/api/showcase/clip/${id}`);
+  r = await anon('GET', `/api/showcase/clip/${id}`);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('content-type'), 'video/mp4');
+  assert.deepEqual(r.data, clip);
+  r = await anon('GET', `/api/showcase/clip/${id}`, undefined, { Range: 'bytes=0-3' });
+  assert.equal(r.status, 206);
+
+  r = await admin('DELETE', `/api/admin/showcase-videos/${id}`);
+  assert.equal(r.status, 200);
+  assert.equal((await anon('GET', `/api/showcase/clip/${id}`)).status, 404);
+  assert.equal((await anon('GET', '/api/showcase')).data.videos.some((v) => v.id === `u${id}`), false);
+  assert.equal(await prisma.blob.count({ where: { key: { startsWith: 'showcase/' } } }), 0, 'the bytes are deleted too');
 });
