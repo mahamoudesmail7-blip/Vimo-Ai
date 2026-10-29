@@ -6,14 +6,23 @@ import { egyptianNumber, speakOffer } from './numbers.js';
 
 const STOP = new Set(['اللي', 'على', 'علي', 'عشان', 'علشان', 'كمان', 'بس', 'ده', 'دي', 'دا', 'دول', 'من', 'في', 'مع', 'عن', 'لحد', 'لما', 'كل', 'انت', 'إنت', 'انتي', 'إنتي', 'هو', 'هي', 'احنا', 'إحنا', 'مش', 'لو', 'او', 'أو', 'ولا', 'يعني', 'خالص', 'أوي', 'اوي', 'جدا', 'جدًا', 'جنيه', 'مية']);
 // Formal Arabic (فصحى) that sounds like an AI or a translation in an Egyptian ad.
-const FORMAL = ['سوف', 'لذلك', 'حيث', 'هذا', 'هذه', 'الذي', 'التي', 'لقد', 'ليس', 'لن', 'كيف', 'ماذا', 'الآن', 'جداً', 'إنه', 'إنها', 'أيضاً', 'أيضا', 'لكن'];
+const FORMAL = ['سوف', 'لذلك', 'حيث', 'هذا', 'هذه', 'الذي', 'التي', 'لقد', 'ليس', 'لن', 'كيف', 'ماذا', 'الآن', 'إنه', 'إنها', 'أيضاً', 'أيضا', 'لكن'];
 // Claims that must come from the seller (or be clearly visible), never from the writer's imagination.
 const CLAIMS = ['ضمان', 'مقاوم للمية', 'ضد المية', 'جلد طبيعي', 'قطن', 'أصلي', 'اوريجينال', 'أورجينال', 'مستورد', 'طبي', 'شحن مجاني', 'الشحن مجاني', 'توصيل مجاني', 'استبدال', 'استرجاع', 'ساعة', 'ساعات', 'ساعتين', 'يوم', 'أيام', 'سنة', 'سنين', 'شهر', 'دقيقة', 'دقايق', 'ثانية', 'ثواني', 'كيلو', 'متر', 'سم', 'مقاس'];
 const MAX_SENTENCE_WORDS = 10;
+// Words a video voice often says wrong: formal or technical words with an easy Egyptian word to use instead.
+const HARD = {
+  'استثنائي': 'جامد', 'استثنائية': 'جامدة', 'متطور': 'حديث', 'متطورة': 'حديثة', 'احترافي': 'محترف', 'احترافية': 'محترفة',
+  'تكنولوجيا': 'تقنية', 'فعالية': 'نتيجة', 'مستحضر': 'كريم', 'الاستخدام': 'الاستعمال', 'استخدامه': 'استعماله',
+  'بالإضافة': 'وكمان', 'بالاضافة': 'وكمان', 'خصيصا': 'مخصوص', 'خصيصًا': 'مخصوص', 'مثالي': 'مظبوط', 'مثالية': 'مظبوطة',
+  'استمتع': 'اتبسط', 'تستمتع': 'تتبسط', 'الأمثل': 'الأحسن', 'فائقة': 'عالية', 'فائق': 'عالي', 'إطلالة': 'شكل', 'اطلالة': 'شكل',
+};
+const MAX_WORD_LETTERS = 10; // longer words (prefixes + suffixes stuck together) are where a voice trips
 
 const plainAr = (t) => String(t || '').replace(/[ً-ٰٟـ]/g, '').replace(/[إأآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
 const wordsOf = (t) => plainAr(t).replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
 const STOP_PLAIN = new Set([...STOP].map((w) => plainAr(w)));
+const HARD_PLAIN = Object.fromEntries(Object.entries(HARD).map(([k, v]) => [plainAr(k), v]));
 const content = (w) => w.length >= 3 && !STOP_PLAIN.has(w) && !STOP_PLAIN.has(stem(w));
 const stem = (w) => w.replace(/^(و|ف|ب)(?=..)/, '').replace(/^ال(?=...)/, '');
 
@@ -52,6 +61,13 @@ export function checkScript({ scenes, limits = [], offer = null, facts = '' }) {
     }
     if (/\d/.test(line)) add(i, 'DIGITS', `المشهد ${i + 1} فيه أرقام مكتوبة بالأرقام، لازم تتكتب كلام.`);
     const w = wordsOf(line);
+    // easy to say: no English words (unless the product name is English), no long or hard words
+    const latin = (line.match(/[A-Za-z][A-Za-z'-]*/g) || []).filter((x) => !sources.includes(x.toLowerCase()) && !String(facts).toLowerCase().includes(x.toLowerCase()));
+    if (latin.length) add(i, 'HARD_WORD', `المشهد ${i + 1} فيه كلام إنجليزي: ${latin.join('، ')}. اكتبه بالعربي.`);
+    const hard = w.map((x) => [x, HARD_PLAIN[x] || HARD_PLAIN[stem(x)]]).filter(([, easy]) => easy);
+    if (hard.length) add(i, 'HARD_WORD', `كلمة صعبة في النطق في المشهد ${i + 1}: ${hard.map(([x, easy]) => `«${x}» (قول «${easy}»)`).join('، ')}.`);
+    const long = w.filter((x) => x.length > MAX_WORD_LETTERS && !sources.includes(x));
+    if (long.length) add(i, 'HARD_WORD', `كلمة طويلة صعبة في النطق في المشهد ${i + 1}: «${long.join('»، «')}». قسّمها لكلام أبسط.`);
     const formal = FORMAL.filter((f) => w.includes(plainAr(f)) || w.some((x) => /^[وف]/.test(x) && x.slice(1) === plainAr(f)));
     if (formal.length) add(i, 'FORMAL', `كلام فصحى في المشهد ${i + 1}: ${formal.join('، ')}.`);
     for (const claim of CLAIMS) {
@@ -87,7 +103,7 @@ export function checkScript({ scenes, limits = [], offer = null, facts = '' }) {
   for (const p of [...allowed].sort((a, b) => b.length - a.length)) rest = rest.split(p).join(' ');
   if (numberWords(!offer).test(rest)) add(null, 'PRICE', offer ? 'في رقم أو سعر في السكريبت مش من السعر اللي كتبته.' : 'السكريبت فيه سعر أو رقم، وإنت ما كتبتش سعر.');
 
-  const LABELS = { REPEAT: 'مفيش كلام متكرر', INVENTED: 'مفيش مميزات متألفة', PRICE: offer ? 'السعر متقال صح' : 'مفيش أسعار متألفة', LONG_SENTENCE: 'الجمل قصيرة', TOO_LONG: 'الكلام على قد وقت كل مشهد', FORMAL: 'عامية مصرية مش فصحى', DIGITS: 'الأرقام مكتوبة كلام' };
+  const LABELS = { HARD_WORD: 'كلام سهل في النطق', REPEAT: 'مفيش كلام متكرر', INVENTED: 'مفيش مميزات متألفة', PRICE: offer ? 'السعر متقال صح' : 'مفيش أسعار متألفة', LONG_SENTENCE: 'الجمل قصيرة', TOO_LONG: 'الكلام على قد وقت كل مشهد', FORMAL: 'عامية مصرية مش فصحى', DIGITS: 'الأرقام مكتوبة كلام' };
   const failed = new Set(issues.map((x) => x.kind));
   return { ok: !issues.length, issues, passed: Object.entries(LABELS).filter(([k]) => !failed.has(k)).map(([, v]) => v) };
 }
