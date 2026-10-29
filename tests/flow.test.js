@@ -57,13 +57,20 @@ const PNG = 'data:image/png;base64,' + Buffer.from('\x89PNG\r\n\x1a\nfake').toSt
 
 function client() {
   let cookie = '';
-  return async (method, path, body, headers = {}) => {
+  const call = async (method, path, body, headers = {}) => {
+    // ordering a video needs an approved script: like the app, write it first (free) unless the test sends its own
+    if (method === 'POST' && path === '/api/videos' && body && !body.script && !body.noScript) {
+      const preview = await call('POST', '/api/videos/script-preview', body);
+      if (preview.status === 200) body = { ...body, script: { product: preview.data.product, scenes: preview.data.scenes } };
+    }
+    if (body?.noScript) { body = { ...body }; delete body.noScript; }
     const res = await fetch(base + path, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { cookie } : {}), ...headers }, body: body ? JSON.stringify(body) : undefined });
     const set = res.headers.get('set-cookie');
     if (set) cookie = set.split(';')[0];
     const type = res.headers.get('content-type') || '';
     return { status: res.status, headers: res.headers, data: type.includes('json') ? await res.json() : Buffer.from(await res.arrayBuffer()) };
   };
+  return call;
 }
 
 async function settle(id, tries = 20) {
@@ -443,4 +450,35 @@ test('talking clips are joined on our server with hard cuts, fal is not asked to
   } finally {
     fake.realMedia = false;
   }
+});
+
+test('script first: photo analysis, free review, and no paid video before the customer saw a script', { skip }, async () => {
+  const user = client();
+  let r = await user('POST', '/api/auth/signup', { name: 'Nour', email: 'mona.script@test.dev', password: 'secret123' });
+  assert.equal(r.status, 201);
+
+  // no vision model reachable in tests: the analysis is empty, the customer just types the description
+  r = await user('POST', '/api/videos/analyze', { images: [PNG] });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.analysis, null);
+
+  // a product read from the photos stands in for the description
+  const analysis = { category: 'shoes', productAr: 'كوتشي سليب أون', colors: ['رمادي', 'أسود'], confirmed: ['من غير رباط'], unknown: ['الخامة'] };
+  r = await user('POST', '/api/videos/script-preview', { images: [PNG], analysis, offer: '500', goal: 'OFFER' });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(r.data.price, { screen: '500', spoken: 'خمس مية جنيه' }, 'on screen as written, said in words');
+  assert.equal(r.data.limits.length, r.data.scenes.length);
+  assert.ok(r.data.checks && Array.isArray(r.data.checks.issues));
+
+  // the customer edits a line: the review runs again, free
+  r = await user('POST', '/api/videos/script-check', { description: 'كوتشي', offer: '500', script: { scenes: [{ voiceover: 'عليه ضمان سنة' }, { voiceover: 'اطلبه بسبع مية جنيه' }] }, limits: [14, 14] });
+  assert.equal(r.status, 200);
+  assert.deepEqual([...new Set(r.data.issues.map((x) => x.kind))].sort(), ['INVENTED', 'PRICE']);
+
+  // ordering without a reviewed script is refused before anything is paid or charged
+  const before = fake.submitted.length;
+  r = await user('POST', '/api/videos', { description: 'كوتشي', images: [PNG], noScript: true });
+  assert.equal(r.status, 400);
+  assert.equal(r.data.error, 'SCRIPT_REQUIRED');
+  assert.equal(fake.submitted.length, before, 'nothing was sent to the video engine');
 });

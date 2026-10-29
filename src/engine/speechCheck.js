@@ -14,7 +14,7 @@ export function normalizeWords(text) {
   return speakNumbers(String(text || ''))
     .replace(/[ً-ٰٟـ]/g, '')
     .replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
-    .replace(/(تلات|ربع|خمس|ست|سبع|تمن|تمان|تسع) مي[ةه]/g, '$1مية') // "خمس مية" and "خمسمية" are the same word
+    .replace(/(تلات|ربع|خمس|ست|سبع|تمن|تمان|تسع) مي[ةه]/g, '$1ميه') // "خمس مية" and "خمسمية" are the same word
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/).filter(Boolean)
     // "و" / "ب" stuck to a word are often heard apart, and the other way round
@@ -45,10 +45,15 @@ export function speechScore(expected, heard) {
   const found = want.map((w) => got.some((g) => similarity(w, g) >= 0.7));
   const score = Math.round((found.filter(Boolean).length / want.length) * 100) / 100;
   const ending = found.slice(-2).some(Boolean);
-  return { score, ending };
+  // numbers and prices are checked word by word, strictly: a price heard wrong is never "close enough"
+  const numbers = want.map((w, i) => (NUMBER_WORD.test(w) ? i : -1)).filter((i) => i >= 0);
+  const numbersOk = numbers.every((i) => got.some((g) => similarity(want[i], g) >= 0.85));
+  return { score, ending, numbersOk };
 }
 
-export const passes = ({ score, ending }) => score >= PASS_SCORE && ending;
+const NUMBER_WORD = /^(واحد|اتنين|تلاته|اربعه|خمسه|سته|سبعه|تمانيه|تسعه|عشره|عشرين|تلاتين|اربعين|خمسين|ستين|سبعين|تمانين|تسعين|ميه|ميتين|(تلات|ربع|خمس|ست|سبع|تمن|تمان|تسع)ميه|الف|الفين|تلاف|جنيه)$/;
+
+export const passes = ({ score, ending, numbersOk = true }) => score >= PASS_SCORE && ending && numbersOk;
 
 /** Listens to a clip. Returns { heard, score, ending } or null when it can't (no key, error). */
 export async function checkClip(url, expected) {

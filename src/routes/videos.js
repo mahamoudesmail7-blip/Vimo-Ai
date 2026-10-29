@@ -3,7 +3,7 @@ import { prisma } from '../db.js';
 import { AppError, asyncRoute } from '../errors.js';
 import { requireAuth } from '../auth.js';
 import rateLimit from 'express-rate-limit';
-import { createVideo, previewScript, remakeVideo, serialize, quote } from '../services/videoJob.js';
+import { createVideo, previewScript, remakeVideo, serialize, quote, analyzeImages, reviewScript, rewriteScriptLine } from '../services/videoJob.js';
 import { getBlob, sendBlob } from '../services/storage.js';
 
 const router = Router();
@@ -32,10 +32,15 @@ router.post('/', asyncRoute(async (req, res) => {
 
 // Free to the customer but not to us (a vision-model call), so it is capped per account.
 const previewLimit = rateLimit({
-  windowMs: 60 * 60 * 1000, limit: 30, keyGenerator: (req) => `u${req.user.id}`, standardHeaders: true, legacyHeaders: false,
+  windowMs: 60 * 60 * 1000, limit: 60, keyGenerator: (req) => `u${req.user.id}`, standardHeaders: true, legacyHeaders: false,
   message: { error: 'RATE_LIMIT', message: 'جربت سكريبتات كتير، استنى شوية وجرب تاني.' },
 });
 router.post('/script-preview', previewLimit, asyncRoute(async (req, res) => res.json(await previewScript(req.body || {}, req.user.id))));
+// Reads the product from its photos (one vision call), and rewrites one line on request: both capped like the preview.
+router.post('/analyze', previewLimit, asyncRoute(async (req, res) => res.json(await analyzeImages(req.body || {}))));
+router.post('/rewrite-line', previewLimit, asyncRoute(async (req, res) => res.json(await rewriteScriptLine(req.body || {}))));
+// The automatic review of an edited script: no AI, free.
+router.post('/script-check', asyncRoute(async (req, res) => res.json(await reviewScript(req.body || {}))));
 
 router.post('/:id/remake', asyncRoute(async (req, res) => {
   res.status(201).json(await remakeVideo(req.user.id, idOf(req.params.id), { sameScript: req.body?.sameScript !== false }));
