@@ -190,3 +190,11 @@ test('with an OpenAI key the script goes to ChatGPT with the photos, and its rev
     delete process.env.OPENAI_MODEL;
   }
 });
+
+test('26 seconds: four parts, hook, features, details, offer', async () => {
+  await withFal(() => JSON.stringify({ scenes: [] }), async (calls) => {
+    await writeScript({ productName: 'جهاز تنظيف الأذن', offer: '500', clipCount: 4, sceneSeconds: [8, 6, 6, 6], imageDataUrl: [IMG] });
+    assert.match(calls[0].body.prompt, /4-scene ad.*8, 6, 6, 6/);
+    assert.match(calls[0].body.prompt, /2\) the FEATURES.*3\) the DETAILS.*4\) the offer/);
+  });
+});

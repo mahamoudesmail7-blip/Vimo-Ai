@@ -276,7 +276,7 @@ async function renderEngines(view, data = null) {
         <div class="field" style="margin:0"><label>فئة الجودة</label><select id="tier" style="width:150px">${Object.entries(TIER).map(([k, l]) => `<option value="${k}" ${e.settings.tier === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="field" style="margin:0"><label>أقصى تكلفة للفيديو ($)</label>${num('id="perVideo"', e.settings.perVideoMaxUsd)}</div>
         <div class="field" style="margin:0"><label>أقصى صرف في اليوم ($)</label>${num('id="perDay"', e.settings.perDayMaxUsd)}</div>
-        <div class="field" style="margin:0"><label>مدة الفيديو</label><select id="targetSeconds" style="width:130px">${[16, 20, 24].map((v) => `<option value="${v}" ${(e.settings.targetSeconds || 24) === v ? 'selected' : ''}>${v} ثانية</option>`).join('')}</select></div>
+        <div class="field" style="margin:0"><label>مدة الفيديو</label><select id="targetSeconds" style="width:130px">${[16, 20, 24, 26].map((v) => `<option value="${v}" ${(e.settings.targetSeconds || 20) === v ? 'selected' : ''}>${v} ثانية</option>`).join('')}</select></div>
         <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="captions" ${e.settings.captions !== false ? 'checked' : ''} /> الكلام مكتوب على الشاشة</label>
         <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="speechCheck" ${e.settings.speechCheck !== false ? 'checked' : ''} /> فحص الكلام تلقائيًا وإعادة المشهد الغلط مرة (~$0.30 لما يحصل)</label>
         <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="hybrid" ${e.settings.hybrid !== false ? 'checked' : ''} /> الفيديو المختلط (الأرخص)</label>
