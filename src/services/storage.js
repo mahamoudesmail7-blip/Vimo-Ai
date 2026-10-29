@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import { prisma } from '../db.js';
 import { AppError } from '../errors.js';
 
-const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'video/mp4': 'mp4' };
+const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov' };
 export const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp'];
 
 export function parseDataUrl(dataUrl) {

@@ -135,6 +135,18 @@ model VideoJob {
   @@map("video_jobs")
 }
 
+// Videos the admin uploads straight to the landing page gallery («شوف شغلنا»),
+// next to the finished customer videos marked with ☆.
+model ShowcaseVideo {
+  id           Int      @id @default(autoincrement())
+  title        String
+  video_key    String
+  aspect_ratio String   @default("9:16") // 9:16 | 16:9
+  created_at   DateTime @default(now())
+
+  @@map("showcase_videos")
+}
+
 // Durable bytes for the default `db` storage driver (product photos,
 // receipts, finished videos). With STORAGE_DRIVER=s3 nothing lands here.
 model Blob {

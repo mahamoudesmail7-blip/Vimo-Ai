@@ -27,7 +27,7 @@ function route() {
   const tab = (location.hash || '#overview').slice(1);
   $$('.side .nav[data-tab]').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
   const view = $('#view');
-  ({ overview: renderOverview, topups: renderTopups, users: renderUsers, videos: renderVideos, engines: renderEngines }[tab] || renderOverview)(view)
+  ({ overview: renderOverview, topups: renderTopups, users: renderUsers, videos: renderVideos, gallery: renderGallery, engines: renderEngines }[tab] || renderOverview)(view)
     .catch((err) => { view.innerHTML = `<div class="empty">${esc(err.message)}</div>`; });
 }
 
@@ -157,6 +157,74 @@ async function renderVideos(view) {
   };
   await load();
   state.poll = setInterval(() => load().catch(() => {}), 8000);
+}
+
+// ---------------------------------------------------------------------------
+// معرض «شوف شغلنا»: videos uploaded straight to the landing page
+// ---------------------------------------------------------------------------
+const ratioOf = (file) => new Promise((done) => {
+  const v = document.createElement('video');
+  v.preload = 'metadata';
+  v.onloadedmetadata = () => { done(v.videoWidth > v.videoHeight ? '16:9' : '9:16'); URL.revokeObjectURL(v.src); };
+  v.onerror = () => done('9:16');
+  v.src = URL.createObjectURL(file);
+});
+
+async function renderGallery(view) {
+  const { videos } = await api('GET', '/api/admin/showcase-videos');
+  const { videos: all } = await api('GET', '/api/showcase');
+  const starred = all.filter((v) => typeof v.id === 'number').length;
+  view.innerHTML = `
+    <h1>معرض «شوف شغلنا»</h1>
+    <p class="sub">الفيديوهات دي بتظهر في الصفحة الرئيسية للزوار. ارفع فيديوهات إنت عاملها أو معاك إذن صاحبها. ${starred ? `ومعاهم ${fmt(starred)} فيديو من فيديوهات العملاء متعلّم عليهم ☆.` : ''}</p>
+    <form class="card" id="up" style="margin-bottom:20px">
+      <h3>ارفع فيديو</h3>
+      <div class="field"><label for="gfile">الفيديو (MP4 أو MOV، لحد 60 ميجا)</label><input type="file" id="gfile" accept="video/mp4,video/quicktime,video/webm" required /></div>
+      <div class="field"><label for="gtitle">اسم المنتج</label><input type="text" id="gtitle" maxlength="80" placeholder="مثلًا: كريم ترطيب" required /></div>
+      <div class="bar hidden" id="gbar"><i style="width:0"></i></div>
+      <div class="err" id="gerr"></div>
+      <button class="btn primary" id="gbtn">ارفع على المعرض</button>
+    </form>
+    ${videos.length ? `<div class="videos">${videos.map((v) => `
+      <div class="vcard"><div class="media ${v.aspectRatio === '16:9' ? 'wide' : ''}"><video src="${v.videoUrl}#t=0.6" controls playsinline preload="metadata"></video></div>
+      <div class="body"><div class="title">${esc(v.title)}</div><div class="muted" style="font-size:13px">${fmtDate(v.createdAt)}</div>
+      <button class="btn small bad" data-del="${v.id}">شيله من المعرض</button></div></div>`).join('')}</div>` : '<div class="empty">لسه مرفعتش فيديوهات.</div>'}`;
+  $('#gfile').onchange = () => {
+    const f = $('#gfile').files[0];
+    if (f && !$('#gtitle').value) $('#gtitle').value = f.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').slice(0, 80);
+  };
+  $('#up').onsubmit = async (e) => {
+    e.preventDefault();
+    const file = $('#gfile').files[0];
+    const title = $('#gtitle').value.trim();
+    const err = $('#gerr');
+    err.textContent = '';
+    if (!file) { err.textContent = 'اختار فيديو.'; return; }
+    if (file.size > 60 * 1024 * 1024) { err.textContent = 'الفيديو أكبر من 60 ميجا، صغّره وجرب تاني.'; return; }
+    if (!title) { err.textContent = 'اكتب اسم المنتج.'; return; }
+    const btn = $('#gbtn');
+    btn.disabled = true;
+    const bar = $('#gbar');
+    bar.classList.remove('hidden');
+    // XHR (not fetch) so the upload progress shows
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/admin/showcase-videos?title=${encodeURIComponent(title)}&ratio=${await ratioOf(file)}`);
+    xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+    xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) bar.firstChild.style.width = `${Math.round((ev.loaded / ev.total) * 100)}%`; };
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch { /* empty */ }
+      if (xhr.status === 201) { toast('اترفع وظهر في الصفحة الرئيسية'); renderGallery(view); return; }
+      err.textContent = data?.message || 'مقدرناش نرفع الفيديو، جرب تاني.';
+      btn.disabled = false; bar.classList.add('hidden');
+    };
+    xhr.onerror = () => { err.textContent = 'النت فصل، جرب تاني.'; btn.disabled = false; bar.classList.add('hidden'); };
+    xhr.send(file);
+  };
+  $$('[data-del]', view).forEach((b) => { b.onclick = async () => {
+    if (!confirm('تشيل الفيديو ده من المعرض؟')) return;
+    try { await api('DELETE', `/api/admin/showcase-videos/${b.dataset.del}`); toast('اتشال'); renderGallery(view); } catch (e2) { toast(e2.message); }
+  }; });
 }
 
 // ---------------------------------------------------------------------------
