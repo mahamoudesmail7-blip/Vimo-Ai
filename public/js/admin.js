@@ -170,17 +170,22 @@ const ratioOf = (file) => new Promise((done) => {
   v.src = URL.createObjectURL(file);
 });
 
+const SAMPLE_FOR = [['', 'مش مثال لشكل معيّن'], ['AUTO', 'مثال لـ «تلقائي»'], ['UGC', 'مثال لـ «شخص بيتكلم»'], ['STUDIO', 'مثال لـ «استوديو»'], ['SHOWCASE', 'مثال لـ «عرض المنتج»']];
+const styleSelect = (id, value = '') => `<select ${id}>${SAMPLE_FOR.map(([v, l]) => `<option value="${v}" ${v === (value || '') ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+
 async function renderGallery(view) {
   const { videos } = await api('GET', '/api/admin/showcase-videos');
   const { videos: all } = await api('GET', '/api/showcase');
   const starred = all.filter((v) => typeof v.id === 'number').length;
   view.innerHTML = `
     <h1>معرض «شوف شغلنا»</h1>
-    <p class="sub">الفيديوهات دي بتظهر في الصفحة الرئيسية للزوار. ارفع فيديوهات إنت عاملها أو معاك إذن صاحبها. ${starred ? `ومعاهم ${fmt(starred)} فيديو من فيديوهات العملاء متعلّم عليهم ☆.` : ''}</p>
+    <p class="sub">الفيديوهات دي بتظهر في الصفحة الرئيسية للزوار، وتقدر تخلّي أي واحد منهم مثال لشكل إعلان في صفحة «إنشاء فيديو». ارفع فيديوهات إنت عاملها أو معاك إذن صاحبها. ${starred ? `ومعاهم ${fmt(starred)} فيديو من فيديوهات العملاء متعلّم عليهم ☆.` : ''}</p>
     <form class="card" id="up" style="margin-bottom:20px">
       <h3>ارفع فيديو</h3>
       <div class="field"><label for="gfile">الفيديو (MP4 أو MOV، لحد 60 ميجا)</label><input type="file" id="gfile" accept="video/mp4,video/quicktime,video/webm" required /></div>
       <div class="field"><label for="gtitle">اسم المنتج</label><input type="text" id="gtitle" maxlength="80" placeholder="مثلًا: كريم ترطيب" required /></div>
+      <div class="field"><label for="gstyle">مثال لشكل إعلان؟</label>${styleSelect('id="gstyle"')}<div class="hint">لو اخترت شكل، الفيديو ده هيظهر جنب الكارت بتاعه في صفحة «إنشاء فيديو» عشان العميل يشوف هيطلعله إيه.</div></div>
+      <label class="choice" style="display:inline-flex;gap:8px;align-items:center;margin-bottom:12px"><input type="checkbox" id="ggallery" checked /> اعرضه كمان في «شوف شغلنا» في الصفحة الرئيسية</label>
       <div class="bar hidden" id="gbar"><i style="width:0"></i></div>
       <div class="err" id="gerr"></div>
       <button class="btn primary" id="gbtn">ارفع على المعرض</button>
@@ -188,6 +193,8 @@ async function renderGallery(view) {
     ${videos.length ? `<div class="videos">${videos.map((v) => `
       <div class="vcard"><div class="media ${v.aspectRatio === '16:9' ? 'wide' : ''}"><video src="${v.videoUrl}#t=0.6" controls playsinline preload="metadata"></video></div>
       <div class="body"><div class="title">${esc(v.title)}</div><div class="muted" style="font-size:13px">${fmtDate(v.createdAt)}</div>
+      ${styleSelect(`data-style="${v.id}"`, v.style)}
+      <label class="muted" style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" data-gal="${v.id}" ${v.inGallery ? 'checked' : ''} /> في «شوف شغلنا»</label>
       <button class="btn small bad" data-del="${v.id}">شيله من المعرض</button></div></div>`).join('')}</div>` : '<div class="empty">لسه مرفعتش فيديوهات.</div>'}`;
   $('#gfile').onchange = () => {
     const f = $('#gfile').files[0];
@@ -208,7 +215,7 @@ async function renderGallery(view) {
     bar.classList.remove('hidden');
     // XHR (not fetch) so the upload progress shows
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/admin/showcase-videos?title=${encodeURIComponent(title)}&ratio=${await ratioOf(file)}`);
+    xhr.open('POST', `/api/admin/showcase-videos?title=${encodeURIComponent(title)}&ratio=${await ratioOf(file)}&style=${$('#gstyle').value}&gallery=${$('#ggallery').checked ? 1 : 0}`);
     xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
     xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) bar.firstChild.style.width = `${Math.round((ev.loaded / ev.total) * 100)}%`; };
     xhr.onload = () => {
@@ -221,6 +228,12 @@ async function renderGallery(view) {
     xhr.onerror = () => { err.textContent = 'النت فصل، جرب تاني.'; btn.disabled = false; bar.classList.add('hidden'); };
     xhr.send(file);
   };
+  $$('[data-style]', view).forEach((sel) => { sel.onchange = async () => {
+    try { await api('PATCH', `/api/admin/showcase-videos/${sel.dataset.style}`, { style: sel.value || null }); toast(sel.value ? 'بقى المثال بتاع الشكل ده' : 'اتشال من الأمثلة'); } catch (e2) { toast(e2.message); }
+  }; });
+  $$('[data-gal]', view).forEach((cb) => { cb.onchange = async () => {
+    try { await api('PATCH', `/api/admin/showcase-videos/${cb.dataset.gal}`, { inGallery: cb.checked }); toast(cb.checked ? 'ظهر في شوف شغلنا' : 'اتشال من شوف شغلنا'); } catch (e2) { toast(e2.message); }
+  }; });
   $$('[data-del]', view).forEach((b) => { b.onclick = async () => {
     if (!confirm('تشيل الفيديو ده من المعرض؟')) return;
     try { await api('DELETE', `/api/admin/showcase-videos/${b.dataset.del}`); toast('اتشال'); renderGallery(view); } catch (e2) { toast(e2.message); }
