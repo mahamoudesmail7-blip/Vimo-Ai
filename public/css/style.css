@@ -214,8 +214,11 @@ th { color: var(--muted); font-weight: 600; }
 .phone { background: rgba(23, 23, 36, .82); border: 1px solid var(--line); border-radius: 30px; padding: 14px; box-shadow: 0 30px 80px rgba(139, 92, 246, .25); backdrop-filter: blur(8px); min-height: 400px; animation: bob 6s ease-in-out infinite; }
 @keyframes bob { 50% { transform: translateY(-8px); } }
 .ph-photo { height: 160px; border-radius: 20px; background: linear-gradient(160deg, #2a2a3d, #1a1a28); position: relative; overflow: hidden; display: grid; place-items: center; }
-.shoe { width: 150px; height: 56px; background: linear-gradient(180deg, #6b7280 0 70%, #f3f4f6 70%); border-radius: 60px 80px 18px 18px; position: relative; }
-.shoe::before { content: ''; position: absolute; width: 60px; height: 36px; background: #4b5563; border-radius: 30px 30px 0 0; top: -22px; inset-inline-end: 22px; }
+.ph-photo { transition: background .6s; }
+.ph-emoji { font-size: 86px; line-height: 1; filter: drop-shadow(0 12px 24px rgba(0, 0, 0, .45)); }
+.ph-emoji.in { animation: popIn .5s cubic-bezier(.2, .9, .3, 1.3) both; }
+.ph-photo .scanline { opacity: 0; }
+.ph-photo.scanning .scanline { opacity: 1; }
 .scanline { position: absolute; inset-inline: 0; height: 40%; top: -40%; background: linear-gradient(180deg, transparent, rgba(139, 92, 246, .55), transparent); border-bottom: 2px solid #a78bfa; animation: scan 2.2s ease-in-out infinite; }
 @keyframes scan { to { top: 100%; } }
 .ph-line { margin: 12px 4px 8px; font-weight: 700; font-size: 15px; min-height: 26px; }
@@ -262,3 +265,11 @@ th { color: var(--muted); font-weight: 600; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* every kind of product, scrolling by */
+.cats { overflow: hidden; border-block: 1px solid var(--line); background: var(--bg-2); padding: 14px 0; -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+.cats-track { display: flex; gap: 12px; width: max-content; animation: marquee 40s linear infinite; }
+.cats-track span { white-space: nowrap; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-weight: 600; font-size: 15px; }
+.cats:hover .cats-track { animation-play-state: paused; }
+@keyframes marquee { to { transform: translateX(50%); } }
+@media (prefers-reduced-motion: reduce) { .cats-track { flex-wrap: wrap; width: auto; justify-content: center; } }
