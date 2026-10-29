@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { sceneSeconds, planVideo } from '../src/engine/planner.js';
+import { sceneSeconds, hybridSeconds, planVideo } from '../src/engine/planner.js';
 import { defaults } from '../src/engine/settings.js';
 import { setFetch } from '../src/engine/media.js';
 import higgsfield from '../src/engine/providers/higgsfield.js';
@@ -19,6 +19,8 @@ test('scene lengths reach ~24s with each model\'s clip durations', () => {
   assert.deepEqual(sceneSeconds([5, 10]), [10, 10, 5]);
   assert.deepEqual(sceneSeconds([6, 10]), [6, 6, 6, 6]);
   assert.deepEqual(sceneSeconds([4, 6, 8], 20), [8, 6, 6]);
+  assert.deepEqual(sceneSeconds([4, 6, 8], 26), [8, 6, 6, 6], '26s = hook, features, details, offer');
+  assert.deepEqual(hybridSeconds([4, 6, 8], 26), [4, 8, 7, 7]);
   assert.equal(defaults().targetSeconds, 20);
 });
 

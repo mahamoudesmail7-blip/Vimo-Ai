@@ -18,7 +18,7 @@ export function defaults() {
     tier: 'economy', // the quality tier every new video uses
     perVideoMaxUsd: 2,
     perDayMaxUsd: 20,
-    targetSeconds: 20, // ad length; the talking clips are paid per second, so shorter is cheaper
+    targetSeconds: 20, // ad length; the talking clips are paid per second, so shorter is cheaper (26s = 4 parts); the talking clips are paid per second, so shorter is cheaper
     captions: true, // burn the spoken line on screen (free, our ffmpeg)
     speechCheck: true, // listen to each talking clip and re-make a garbled one once
     hybrid: true, // allow the one-AI-clip + product-photo production (cheapest)

@@ -272,7 +272,7 @@ async function renderCreate(view) {
     $('#goHint').textContent = !q.available ? '' : f.script ? `الفيديو بيتعمل بالسكريبت ده بالظبط، وبيتخصم ${q.credits === 1 ? 'فيديو واحد' : `${fmt(q.credits)} فيديو`} من رصيدك.` : 'اكتب السكريبت وراجعه الأول، وبعدين اعمل الفيديو.';
   };
   const limit = (i) => f.script.limits?.[i] || Math.max(8, Math.round((f.script.sceneSeconds?.[i] || f.script.clipSeconds) * 2.3));
-  const names = (n) => Array.from({ length: n }, (_, i) => (i === 0 ? 'الهوك' : i === n - 1 ? 'العرض والطلب' : 'الاستخدام والمميزات'));
+  const names = (n) => (n === 4 ? ['الهوك', 'مميزات المنتج', 'تفاصيل المنتج', 'العرض والطلب'] : Array.from({ length: n }, (_, i) => (i === 0 ? 'الهوك' : i === n - 1 ? 'العرض والطلب' : 'الاستخدام والمميزات')));
   function drawChecks() {
     const el = $('#checks');
     const c = f.script?.checks;
