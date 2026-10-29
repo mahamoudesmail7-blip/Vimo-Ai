@@ -22,39 +22,76 @@
 
 <main>
   <div class="hero">
-    <div class="wrap">
-      <h1>حوّل صورة منتجك لـ <span class="hl">فيديو إعلاني</span> بيبيع</h1>
-      <p>ارفع صورة المنتج واكتب كلمتين عنه، وVimo AI يطلعلك فيديو <span id="secs">24</span> ثانية بصوت وكلام مصري، جاهز لتيك توك وريلز وفيسبوك. من غير تصوير ولا مونتاج.</p>
-      <div class="cta">
+    <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="wrap hero-grid">
+      <div class="hero-text">
+      <h1 class="reveal">حوّل صورة منتجك لـ <span class="hl">فيديو إعلاني</span> بيبيع</h1>
+      <p class="reveal">ارفع صورة المنتج بس، وVimo AI يفهمه ويكتبلك السكريبت ويطلعلك فيديو <span id="secs">24</span> ثانية بصوت وكلام مصري، جاهز لتيك توك وريلز وفيسبوك. من غير تصوير ولا مونتاج.</p>
+      <div class="cta reveal">
         <a class="btn primary" href="/auth?mode=signup">اعمل أول فيديو</a>
         <a class="btn" href="#pricing">شوف الأسعار</a>
       </div>
-      <div class="pills">
+      <div class="pills reveal">
         <span class="pill">صوت بالعامية المصرية</span>
         <span class="pill">المنتج زي ما هو بالظبط</span>
         <span class="pill">طولي 9:16 أو عرضي 16:9</span>
         <span class="pill">جاهز في دقايق</span>
       </div>
+      </div>
+      <div class="demo reveal" aria-hidden="true">
+        <div class="phone">
+          <div class="ph-photo"><div class="shoe"></div><div class="scanline"></div></div>
+          <div class="ph-line" id="dmStage">بيشوف المنتج…</div>
+          <div class="ph-chips" id="dmChips"></div>
+          <div class="ph-hooks" id="dmHooks"></div>
+        </div>
+        <div class="float f1">✓ السعر متقال صح</div>
+        <div class="float f2">5 هوكات · الأقوى 9/10</div>
+      </div>
     </div>
   </div>
+
+  <section id="ai">
+    <div class="wrap">
+      <h2 class="reveal">الذكاء الاصطناعي بيشتغلك</h2>
+      <p class="lead reveal">أمثلة لبدايات إعلانات بيكتبها Vimo AI، كل واحدة بتقييمها.</p>
+      <div class="slider reveal" id="hookSlider">
+        <div class="slides">
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">كوتشي سليب أون</span><span class="hc-score">9/10</span></div><div class="hc-text">«رجلك بتوجعك من الجزمة كل ما تنزل؟»</div><div class="hc-why">✓ سؤال عن وجع يومي</div><div class="meter"><i style="--w:90%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">شنطة يد</span><span class="hc-score">8/10</span></div><div class="hc-text">«كل حاجاتك في شنطة واحدة ومنظمة»</div><div class="hc-why">✓ مشكلة كل يوم وحلها</div><div class="meter"><i style="--w:80%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">كريم ترطيب</span><span class="hc-score">9/10</span></div><div class="hc-text">«بشرتك بتنشف أول ما الجو يبرد؟»</div><div class="hc-why">✓ موقف كل الناس عاشته</div><div class="meter"><i style="--w:90%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">مكنسة شحن</span><span class="hc-score">8/10</span></div><div class="hc-text">«نضّفت الشقة كلها من غير سلك»</div><div class="hc-why">✓ نتيجة قدام عينك</div><div class="meter"><i style="--w:80%"></i></div></div>
+          <div class="slide hook-card"><div class="hc-top"><span class="hc-prod">ساعة رجالي</span><span class="hc-score">7/10</span></div><div class="hc-text">«الساعة دي بتخلّي أي لبس شيك»</div><div class="hc-why">✓ إحساس وشكل</div><div class="meter"><i style="--w:70%"></i></div></div>
+        </div>
+        <button class="arrow prev" type="button" aria-label="السابق">›</button>
+        <button class="arrow next" type="button" aria-label="التالي">‹</button>
+        <div class="dots"></div>
+      </div>
+    </div>
+  </section>
 
   <section id="how">
     <div class="wrap">
       <h2>إزاي بيشتغل؟</h2>
       <p class="lead">تلات خطوات وبس، والباقي علينا.</p>
       <div class="steps">
-        <div class="step"><div class="n">1</div><h3>ارفع صورة المنتج</h3><p>صورة واضحة للمنتج، ومعاها وصف قصير والعرض أو السعر لو حابب.</p></div>
-        <div class="step"><div class="n">2</div><h3>الذكاء الاصطناعي يشتغل</h3><p>بنكتب سكريبت بيبيع بالمصري، ونصوّر 3 مشاهد بالمنتج نفسه، ونجمعهم في فيديو واحد.</p></div>
-        <div class="step"><div class="n">3</div><h3>حمّل الفيديو</h3><p>فيديو جاهز للنشر على السوشيال ميديا، تحمّله وتطلّعه إعلان على طول.</p></div>
+        <div class="step reveal"><div class="n">1</div><h3>ارفع صورة المنتج</h3><p>صورة واضحة للمنتج، ومعاها وصف قصير والعرض أو السعر لو حابب.</p></div>
+        <div class="step reveal"><div class="n">2</div><h3>الذكاء الاصطناعي يشتغل</h3><p>بيفهم المنتج، ويكتب 5 هوكات ويختار الأقوى، وتراجع السكريبت وتعدّله قبل ما تدفع.</p></div>
+        <div class="step reveal"><div class="n">3</div><h3>حمّل الفيديو</h3><p>فيديو جاهز للنشر على السوشيال ميديا، تحمّله وتطلّعه إعلان على طول.</p></div>
       </div>
     </div>
   </section>
 
   <section id="showcase" class="hidden">
     <div class="wrap">
-      <h2>شوف شغلنا</h2>
-      <p class="lead">فيديوهات حقيقية اتعملت على Vimo AI، من صورة لفيديو في دقايق.</p>
-      <div class="videos" id="gallery"></div>
+      <h2 class="reveal">شوف شغلنا</h2>
+      <p class="lead reveal">فيديوهات حقيقية اتعملت على Vimo AI، من صورة لفيديو في دقايق.</p>
+      <div class="slider video-slider" id="gallerySlider">
+        <div class="slides" id="gallery"></div>
+        <button class="arrow prev" type="button" aria-label="السابق">›</button>
+        <button class="arrow next" type="button" aria-label="التالي">‹</button>
+        <div class="dots"></div>
+      </div>
     </div>
   </section>
 
@@ -89,14 +126,33 @@
 
 <script type="module">
   import { api, esc, fmt, LOGO } from '/js/common.js';
+  import { reveal, slider, calm } from '/js/motion.js';
+  reveal();
+  slider(document.getElementById('hookSlider'), { every: 3500 });
+  // the little demo in the hero: photo read, facts found, hooks scored, on a loop
+  const stage = document.getElementById('dmStage');
+  const chipsEl = document.getElementById('dmChips');
+  const hooksEl = document.getElementById('dmHooks');
+  const DEMO = [
+    () => { stage.textContent = 'بيشوف المنتج…'; chipsEl.innerHTML = ''; hooksEl.innerHTML = ''; },
+    () => { stage.textContent = 'كوتشي رجالي سليب أون'; chipsEl.innerHTML = ['رمادي', 'أسود', 'كحلي', '✓ من غير رباط'].map((c, i) => `<span style="--d:${i * 120}ms">${c}</span>`).join(''); },
+    () => { stage.textContent = 'بيكتب 5 هوكات ويقيّمهم…'; hooksEl.innerHTML = [['رجلك بتوجعك كل ما تنزل؟', 9], ['تلبسه في ثانية من غير رباط', 8], ['تلات ألوان لكل لبس', 7]].map(([t, n], i) => `<div class="${i ? '' : 'best'}" style="--d:${i * 200}ms"><b>${n}/10</b>${t}</div>`).join(''); },
+    () => { stage.textContent = '✓ السكريبت جاهز تراجعه'; },
+  ];
+  let step = 0;
+  const play = () => { DEMO[step % DEMO.length](); step++; };
+  play();
+  if (!calm()) setInterval(play, 2200); else { DEMO[1](); DEMO[2](); DEMO[3](); }
   document.getElementById('brand').innerHTML = LOGO;
   document.getElementById('year').textContent = new Date().getFullYear();
   api('GET', '/api/showcase').then(({ videos }) => {
     if (!videos.length) return;
     document.getElementById('gallery').innerHTML = videos.map((v) => `
-      <div class="vcard"><div class="media ${v.aspectRatio === '16:9' ? 'wide' : ''}"><video src="${v.videoUrl}" poster="${v.imageUrl}" controls playsinline preload="none"></video></div>
+      <div class="slide vcard"><div class="media ${v.aspectRatio === '16:9' ? 'wide' : ''}"><video src="${v.videoUrl}" poster="${v.imageUrl}" controls playsinline muted loop preload="metadata"></video></div>
       <div class="body"><div class="title">${esc(v.productName)}</div></div></div>`).join('');
     document.getElementById('showcase').classList.remove('hidden');
+    reveal();
+    slider(document.getElementById('gallerySlider'), { every: 6000 });
   }).catch(() => {});
   const cfg = await api('GET', '/api/config').catch(() => null);
   if (cfg) {
