@@ -142,6 +142,8 @@ model ShowcaseVideo {
   title        String
   video_key    String
   aspect_ratio String   @default("9:16") // 9:16 | 16:9
+  style        String? // AUTO | UGC | STUDIO | SHOWCASE: shown as the example next to that style on the create page
+  in_gallery   Boolean  @default(true) // also in «شوف شغلنا» on the landing page
   created_at   DateTime @default(now())
 
   @@map("showcase_videos")

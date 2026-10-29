@@ -100,7 +100,9 @@ router.get('/videos', asyncRoute(async (req, res) => {
 // The landing page gallery: videos uploaded straight from the admin's device.
 const SHOWCASE_MIMES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const SHOWCASE_MAX_MB = 60;
-const showcaseOut = (v) => ({ id: v.id, title: v.title, aspectRatio: v.aspect_ratio, videoUrl: `/api/showcase/clip/${v.id}`, createdAt: v.created_at });
+const SAMPLE_STYLES = ['AUTO', 'UGC', 'STUDIO', 'SHOWCASE'];
+const styleOf = (v) => (SAMPLE_STYLES.includes(v) ? v : null);
+const showcaseOut = (v) => ({ id: v.id, title: v.title, aspectRatio: v.aspect_ratio, style: v.style, inGallery: v.in_gallery, videoUrl: `/api/showcase/clip/${v.id}`, createdAt: v.created_at });
 
 router.get('/showcase-videos', asyncRoute(async (req, res) => {
   const rows = await prisma.showcaseVideo.findMany({ orderBy: { created_at: 'desc' } });
@@ -114,8 +116,19 @@ router.post('/showcase-videos', express.raw({ type: SHOWCASE_MIMES, limit: `${SH
   const title = String(req.query.title || '').trim().slice(0, 80);
   if (!title) throw new AppError('اكتب اسم المنتج اللي في الفيديو.');
   const { key } = await putBuffer(req.body, mime, 'showcase');
-  const row = await prisma.showcaseVideo.create({ data: { title, video_key: key, aspect_ratio: req.query.ratio === '16:9' ? '16:9' : '9:16' } });
+  const row = await prisma.showcaseVideo.create({ data: { title, video_key: key, aspect_ratio: req.query.ratio === '16:9' ? '16:9' : '9:16', style: styleOf(req.query.style), in_gallery: req.query.gallery !== '0' } });
   res.status(201).json(showcaseOut(row));
+}));
+
+router.patch('/showcase-videos/:id', asyncRoute(async (req, res) => {
+  const id = idOf(req.params.id);
+  const data = {};
+  if ('style' in (req.body || {})) data.style = styleOf(req.body.style);
+  if ('inGallery' in (req.body || {})) data.in_gallery = req.body.inGallery !== false;
+  if (typeof req.body?.title === 'string' && req.body.title.trim()) data.title = req.body.title.trim().slice(0, 80);
+  const row = await prisma.showcaseVideo.update({ where: { id }, data }).catch(() => null);
+  if (!row) throw new AppError('مش موجود.', 404, 'NOT_FOUND');
+  res.json(showcaseOut(row));
 }));
 
 router.delete('/showcase-videos/:id', asyncRoute(async (req, res) => {
