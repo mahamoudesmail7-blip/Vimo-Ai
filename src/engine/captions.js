@@ -3,8 +3,8 @@
 // the speech like the best-performing Arabic ads. The offer (price, discount)
 // shows as a yellow badge during the last scene.
 //
-// Editing effect: a quick punch-in zoom halfway through each talking scene,
-// like TikTok editors do, so a long take never feels static.
+// Editing effect: a slow, smooth push-in over each talking scene, so a long
+// take never feels static (a sudden punch-in looked like a glitch).
 //
 // Timing is estimated from the script (no speech recognition): in "speech"
 // mode each scene's line is spread over its own clip; with a voiceover the
@@ -20,7 +20,8 @@ const FONTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const WORDS_PER_LINE = 3;
 const VOICE_WORDS_PER_SECOND = 3;
 
-const words = (t) => String(t || '').replace(/[{}\\]/g, '').split(/\s+/).filter(Boolean);
+// "بـ خمسمية" reads as "بخمسمية" on screen
+const words = (t) => String(t || '').replace(/[{}\\]/g, '').replace(/(^|\s)بـ\s+/g, '$1ب').split(/\s+/).filter(Boolean);
 const round = (n) => Math.round(n * 100) / 100;
 // Right-to-left marks around each line keep numbers and end punctuation in place.
 const rtl = (t) => `\u200F${t}\u200F`;
@@ -74,12 +75,12 @@ export function captionCues({ scenes, sceneSeconds, mode, offer }) {
     const all = scenes.flatMap((s) => words(s.voiceover));
     cues = cuesFor(all, 0.2, Math.min(total - 0.3, 0.2 + all.length / VOICE_WORDS_PER_SECOND));
   }
-  // punch-in for the second half of each talking scene (hybrid photo scenes already move)
+  // a slow push-in over each talking scene (hybrid photo scenes already move)
   const punches = [];
   if (mode !== 'hybrid') {
     let start = 0;
     for (const secs of sceneSeconds) {
-      if (secs >= 4) punches.push([round(start + secs / 2), round(start + secs)]);
+      if (secs >= 4) punches.push([round(start), round(start + secs)]);
       start += secs;
     }
   }
@@ -123,15 +124,15 @@ export function toAss({ cues, badge }, aspectRatio = '9:16') {
   ].join('\n');
 }
 
-const PUNCH = 1.1;
+const PUSH = 0.06; // zoom reached at the end of a scene: 1 -> 1.06
 
 /** The video filter: punch-in zooms (if any), then the captions. */
 export function captionFilter({ punches = [] } = {}, aspectRatio = '9:16') {
   const [W, H] = aspectRatio === '16:9' ? [1280, 720] : [720, 1280];
   const base = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1`;
   if (!punches.length) return `${base},ass=c.ass:fontsdir=${FONTS_DIR}`;
-  const on = punches.map(([a, b]) => `between(t\\,${a}\\,${b})`).join('+');
-  const z = `if(${on}\\,${PUNCH}\\,1)`;
+  // 1 + 0.06 * (how far into its scene this frame is)
+  const z = `1+${PUSH}*(${punches.map(([a, b]) => `between(t\\,${a}\\,${b})*(t-${a})/${round(b - a)}`).join('+')})`;
   return `${base},scale=w='trunc(${W}*${z}/2)*2':h='trunc(${H}*${z}/2)*2':eval=frame,crop=${W}:${H},ass=c.ass:fontsdir=${FONTS_DIR}`;
 }
 

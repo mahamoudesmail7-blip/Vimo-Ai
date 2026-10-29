@@ -9,20 +9,25 @@
 // fails a template script is used, so a video can always be made.
 import { env } from '../config.js';
 import * as fal from './fal.js';
-import { speakNumbers } from './numbers.js';
+import { speakNumbers, speakOffer } from './numbers.js';
+import { checkScript } from './scriptCheck.js';
 
 const STYLE_DIRECTION = {
   AUTO: 'High-converting Egyptian social ad: a real Egyptian person using the product in a real home, mixed with sharp close-ups of the product details, natural light, filmed on a smartphone.',
   UGC: 'Authentic user-generated-content look: filmed on a smartphone, handheld, natural home lighting, a real Egyptian person talking to the camera like a TikTok review.',
   CINEMATIC: 'Premium cinematic product commercial: smooth slow camera moves, soft natural light, shallow depth of field, an elegant real Egyptian home or street setting.',
-  STUDIO: 'Polished talking-head ad in a modern content-creator studio: the speaker sits on a cream boucle armchair facing the camera, in front of a deep teal-green wall with warm glowing lamps, wooden shelves and green plants, soft warm key light on the face, shallow depth of field with creamy bokeh, shot on a cinema camera, holding or showing the product.',
+  STUDIO: 'Polished talking-head ad in a modern content-creator studio: the speaker sits on a cream boucle armchair facing the camera, in front of a deep teal-green wall with warm glowing lamps, wooden shelves and green plants, soft warm key light on the face, shallow depth of field with creamy bokeh, shot on a cinema camera, holding or showing the product. The hook scene is seated; the middle scene may stand up in the same studio to use or wear the product.',
   SHOWCASE: 'Clean product showcase: the product on a tidy real surface, close-up details, slow push-in shots, bright even lighting, a person only as hands or in the background.',
 };
 
-// What the customer wants the words to do (chosen before the script is written).
-export const GOALS = ['SALES', 'EMOTIONAL', 'REVIEW'];
+// What the customer wants the words to do (one choice, before the script is written).
+// EMOTIONAL and REVIEW are kept for videos ordered before the four goals.
+export const GOALS = ['SALES', 'CURIOSITY', 'PROBLEM', 'OFFER', 'EMOTIONAL', 'REVIEW'];
 const GOAL_DIRECTION = {
-  SALES: 'Goal: direct sales. Lead with the main benefit, make the offer clear and end with a confident, clear call to order now.',
+  SALES: 'Goal: direct sales. Lead with the main benefit, make the viewer picture owning it, make the offer feel like a deal and end with a confident, clear call to order now.',
+  CURIOSITY: 'Goal: curiosity. Open with something surprising or a question the viewer must hear the answer to, reveal the product as the answer, then one strong reason to want it and a call to order.',
+  PROBLEM: 'Goal: problem and solution. Name a real everyday problem the buyer of THIS product has, show the product solving it in use, then the call to order.',
+  OFFER: 'Goal: a special offer. Lead with the deal itself (only the price/offer the seller wrote, never invented), say why it is worth it, add urgency without lying (no fake countdowns or stock numbers) and call to order now.',
   EMOTIONAL: 'Goal: emotional. Start from a feeling or a small everyday moment the buyer knows well, show how the product makes life feel better, warm and close to the heart; end with a soft, friendly call to order.',
   REVIEW: 'Goal: an honest personal review. The person tells their own experience like talking to a friend: why they got it, what they liked, one honest detail. Natural and not salesy; end by saying how to order.',
 };
@@ -63,9 +68,9 @@ export function templateScript({ productName, description, offer, clipCount, sce
   const benefit = trimWords(clean(String(description || '').split(/[.\n،,]/)[0]) || `${name} هيفرق معاك`, 9);
   const say = (t) => trimWords(t, MAX_VOICE_WORDS);
   const lines = [
-    { camera: 'close-up, handheld', visual: 'A person in a real Egyptian living room holds the product up next to their face toward the phone camera, looking surprised and excited.', motion: 'The person talks to the camera with natural small head movements; the camera is handheld with slight sway.', voiceover: say(`بجد مش مصدق إن ${name} بالشكل ده! أول ما جربته فهمت الناس بتتكلم عنه ليه.`) },
-    { camera: 'medium shot, slow push-in', visual: 'Medium shot: the person uses the product the way it is meant to be used, the product clearly visible in their hands.', motion: 'The person uses the product slowly and naturally while talking; slow push-in.', voiceover: say(`${benefit}، وكمان سهل في الاستخدام وشكله حلو، وده اللي خلاني أحبه.`) },
-    { camera: 'close-up on product, then person smiling', visual: 'Close-up: the person holds the product toward the camera and smiles, warm natural light.', motion: 'The person nods and smiles while talking to the camera; the product stays still in frame.', voiceover: offer ? say(`${trimWords(clean(offer), 6)} ، والتوصيل لحد باب البيت والدفع عند الاستلام، اطلبه دلوقتي قبل ما الكمية تخلص!`) : 'اطلبه دلوقتي والتوصيل لحد باب البيت والدفع عند الاستلام، الحق قبل ما الكمية تخلص!' },
+    { shotAr: 'ماسك المنتج جنب وشه وبيكلم الكاميرا', camera: 'close-up, handheld', visual: 'A person in a real Egyptian living room holds the product up next to their face toward the phone camera, looking surprised and excited.', motion: 'The person talks to the camera with natural small head movements; the camera is handheld with slight sway.', voiceover: say(`بجد مش مصدق إن ${name} بالشكل ده! أول ما جربته فهمت الناس بتتكلم عنه ليه.`) },
+    { shotAr: 'بيستخدم المنتج قدام الكاميرا', camera: 'medium shot, slow push-in', visual: 'Medium shot: the person uses the product the way it is meant to be used, the product clearly visible in their hands.', motion: 'The person uses the product slowly and naturally while talking; slow push-in.', voiceover: say(`${benefit}، وكمان سهل في الاستخدام وشكله حلو، وده اللي خلاني أحبه.`) },
+    { shotAr: 'لقطة قريبة للمنتج وهو بيبتسم', camera: 'close-up on product, then person smiling', visual: 'Close-up: the person holds the product toward the camera and smiles, warm natural light.', motion: 'The person nods and smiles while talking to the camera; the product stays still in frame.', voiceover: offer ? say(`${trimWords(clean(offer), 6)} ، والتوصيل لحد باب البيت والدفع عند الاستلام، اطلبه دلوقتي قبل ما الكمية تخلص!`) : 'اطلبه دلوقتي والتوصيل لحد باب البيت والدفع عند الاستلام، الحق قبل ما الكمية تخلص!' },
   ];
   const scenes = clipCount === 1 ? [lines[0]] : clipCount === 2 ? [lines[0], lines[2]] : lines.slice(0, 2).concat(Array(Math.max(0, clipCount - 3)).fill(lines[1]), [lines[2]]);
   const limits = limitsOf(clipCount, sceneSeconds, pace);
@@ -77,19 +82,33 @@ function normalize(data, clipCount, limits) {
   const scenes = Array.isArray(data?.scenes) ? data.scenes : [];
   if (scenes.length < clipCount) return null;
   const out = scenes.slice(0, clipCount).map((s, i) => ({
+    shotAr: String(s.shotAr || '').replace(/\s+/g, ' ').trim().slice(0, 140),
     camera: String(s.camera || '').slice(0, 160),
     visual: String(s.visual || '').slice(0, 900),
     motion: String(s.motion || '').slice(0, 500),
     voiceover: fitLine(s.voiceover, limits[i]),
   }));
   if (out.some((s) => !s.visual || !s.voiceover)) return null;
+  const hooks = readHooks(data.hooks);
   return {
     product: readProduct(data.product),
+    hooks,
+    hookIndex: hooks.length ? Math.max(0, hooks.findIndex((h) => out[0].voiceover.startsWith(h.text))) : -1,
     hook: String(data.hook || out[0].voiceover),
     cta: String(data.cta || out[out.length - 1].voiceover),
     scenes: out,
     source: 'AI',
   };
+}
+
+/** Up to 5 hooks, best first, each with its score (1-10) and a short reason. */
+export function readHooks(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : [])
+    .map((h) => ({ text: String(h?.text || '').replace(/\s+/g, ' ').trim().slice(0, 120), angle: String(h?.angle || '').slice(0, 40), score: Math.min(10, Math.max(1, Math.round(Number(h?.score) || 5))), why: String(h?.why || '').slice(0, 160) }))
+    .filter((h) => h.text && !seen.has(h.text) && seen.add(h.text))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 }
 
 function readProduct(p) {
@@ -121,6 +140,7 @@ export function userScript(input, clipCount, { sceneSeconds, pace } = {}) {
     if (voiceover.split(' ').length > limits[i] + 5) return { error: `كلام المشهد ${i + 1} طويل على ${sceneSeconds?.[i] || env.clipSeconds()} ثواني، خليه أقصر.` };
     const last = i === scenes.length - 1 && i > 0;
     out.push({
+      shotAr: String(s?.shotAr || '').slice(0, 140),
       camera: String(s?.camera || '').slice(0, 160) || 'medium shot',
       visual: String(s?.visual || '').slice(0, 900) || GENERIC_VISUAL[last ? 2 : Math.min(i, 1)],
       motion: String(s?.motion || '').slice(0, 500),
@@ -138,7 +158,12 @@ const SYSTEM = [
   'You reply with one JSON object only, no markdown.',
 ].join(' ');
 
-function scriptRequest({ productName, description, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech' }) {
+/** Everything the ad may say as a fact: the seller's words and what the photos clearly show. */
+export function factsOf({ productName, description, details, analysis }) {
+  return [productName, description, details, ...(analysis?.confirmed || []), ...(analysis?.colors || [])].filter(Boolean).join(' . ');
+}
+
+function scriptRequest({ productName, description, details, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech', analysis = null }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
   const secs = Array.from({ length: clipCount }, (_, i) => sceneSeconds?.[i] || env.clipSeconds());
   const voiceover = mode === 'voiceover' || mode === 'hybrid';
@@ -146,22 +171,31 @@ function scriptRequest({ productName, description, offer, style, goal, voiceGend
   return [
     `Product name: ${productName}`,
     description ? `Seller's description: ${description}` : '',
-    offer ? `Offer / price (must be said in the last scene, with exactly these prices, spoken like this: "${speakNumbers(offer)}"): ${offer}` : 'No price was given: do not say any price or discount.',
+    details ? `Extra details from the seller (true facts): ${details}` : '',
+    analysis ? `What the photos clearly show (confirmed): ${[analysis.productAr, ...analysis.confirmed].filter(Boolean).join('; ') || 'nothing more'}` : '',
+    analysis?.colors?.length > 1 ? `Color variants in the photos (show and name ALL of them in one scene): ${analysis.colors.join('، ')}` : '',
+    analysis?.unknown?.length ? `NOT known, never say anything about these: ${analysis.unknown.join('; ')}` : '',
+    analysis?.useScenes?.length ? `Real-use shots that fit this kind of product (use one for the middle scene): ${analysis.useScenes.join(' / ')}` : '',
+    offer ? `Offer / price (must be said in the last scene, with exactly these prices, spoken like this: "${speakOffer(offer)}"): ${offer}` : 'No price was given: do not say any price or discount.',
     `Ad style: ${STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC}`,
     GOAL_DIRECTION[goal] || GOAL_DIRECTION.SALES,
     voiceover ? `Voice: ${speaker} reads the lines as a voiceover over the footage; nobody talks on camera, people only react naturally.` : `Speaker: ${speaker}.`,
     '',
-    'STEP 1. Study the attached product photo closely before writing anything:',
-    '- what the product really is and what problem it solves;',
+    'STEP 1. Study ALL the attached product photos closely before writing anything:',
+    '- what the product really is, who buys it, and the everyday moments it makes better (e.g. for shoes: work, outings, long walks; for a kitchen tool: cooking for the family);',
+    '- the variants the photos show: if they show the same product in several colors or models, the ad says how many and names the colors in simple Egyptian words (e.g. "متوفرة بتلات ألوان: رمادي وأسود وكحلي");',
     '- exactly how it is physically held and used (which hand, which part touches the body or the object, its size compared to a hand);',
     '- its exact look: shape, proportions, colors, materials, every visible part, logo and label text.',
     '',
     `STEP 2. Write a ${clipCount}-scene ad. Each scene is ONE clip; the scene lengths in seconds are: ${secs.join(', ')}.`,
-    '- Scene 1 is the hook: in the first 2 seconds hit a real pain, fear or desire of the buyer, or say something surprising. It must make an Egyptian stop scrolling. A direct question to the viewer works best (e.g. "مين قالك إنك لازم...؟", "البرد موقف شغلك؟").',
+    '- HOOKS FIRST: write 5 different hooks (each max 8 words, each a different angle: a pain question, a surprising claim the facts support, a curiosity gap, a "you vs. others" contrast, the offer). Score each 1-10 for: stops an Egyptian scrolling in 2 seconds, fits THIS product and its buyer, fits the goal, true to the facts, easy to say. Pick the best one.',
+    '- Scene 1 is the hook: its line STARTS with the chosen hook word for word, then flows on. A short direct question about an everyday situation works well (e.g. "رجلك بتوجعك من الجزمة كل ما تنزل؟", "البرد موقف شغلك؟"). Hooks never use made-up numbers or times ("بعد ساعتين", "في 5 دقايق") unless the seller gave them.',
     '- It is ONE person in ONE place for the whole ad, talking straight to the camera like a real review, holding the product near their face or using it. Every scene\'s "visual" keeps the same person, outfit and place; only the framing changes (medium shot, close-up on the product in hand).',
     '- The lines flow as one continuous talk across the scenes, like the person never stopped talking.',
-    '- Middle scene(s): show the product being used correctly and give ONE concrete benefit with a feeling or a quick proof (a before/after moment, a reaction).',
-    '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt).',
+    '- Middle scene(s): the product is IN USE, never just held: shoes are worn on the feet (the person stands or walks a few steps, feet clearly in frame), clothes are worn, a tool or gadget is doing its job. Same person and place. Give one or two concrete benefits the buyer feels in daily life, plus the colors/variants if there are several.',
+    '- Make it persuasive, not plain: every line gives a reason to buy. Help the viewer picture the moment ("تخيل تلف اليوم كله ورجلك مرتاحة"), use a reaction or a feeling, no empty filler ("سهلة تلبسها" alone is weak: say what it gives them).',
+    '- Last scene: the offer, urgency and a clear call to order now (delivery to the door / cash on delivery are normal in Egypt). Say the price like "سعرها دلوقتي خمس مية جنيه بس، بدل تمن مية", never "بخصم خمسمية" and never a ب stuck to the number.',
+    '- Never use the same word twice close together (e.g. "دلوقتي" twice in the last scene).',
     '',
     voiceover ? 'Rules for "voiceover" (the narration for that scene):' : 'Rules for "voiceover" (the line the speaker says on camera):',
     pace !== 'fast'
@@ -171,22 +205,27 @@ function scriptRequest({ productName, description, offer, style, goal, voiceGend
     '- Easy to say out loud: common everyday words only, short sentences (3 to 8 words), no rare or formal words, no long words stuck together, no tongue twisters. Every sentence is complete and grammatically right.',
     '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
     '- Facts must be TRUE: only say features, numbers, brand names, materials or specs that are in the seller\'s description or clearly visible in the photo. Never invent power, sizes, guarantees, prices or delivery times. If unsure, describe the benefit in general words instead.',
-    '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud. Write prices and numbers as Egyptian words spelled as they are said, with "بـ" as its own word ("بـ تلاتمية وخمسين جنيه"), never digits.',
+    '- Correct Egyptian spelling as people really write it (e.g. دلوقتي، عشان، إزاي، أوي، حواليك), and the line must make sense when read aloud. Write prices and numbers as Egyptian words spelled as they are said, hundreds as two words ("خمس مية", "تمن مية"), never digits, and never a ب stuck to a price: say "سعرها خمس مية جنيه بس".',
     '',
     'Rules for "visual" (the first frame, in English, max 90 words). It becomes a real photo made from the product photo, so:',
     '- describe ONE photorealistic smartphone-camera frame: a real Egyptian setting, the speaker, framing, light;',
     '- the product appears exactly as in the photo, fully visible, at real-world size, held or used correctly as found in STEP 1;',
+    '- when a scene\'s line names several colors or models, its visual shows ALL of them together, each exactly as in its photo (e.g. the person holds one pair and the other pairs sit next to them);',
+    '- when a scene shows the product in use (worn, used), the visual makes that use clearly visible (e.g. full-body or feet shot with the shoes on);',
     '- no text, no logos other than the product\'s own, no other products.',
     '',
     'Rules for "motion" (in English, max 50 words): what moves during the clip. Keep it simple and physically plausible: the speaker talks to the camera with natural gestures, small hand moves, a slow camera push or handheld sway. The product stays rigid and identical; it never transforms, opens or changes unless that is how it is really used.',
     '',
+    'Rules for "shotAr": one short Egyptian-Arabic sentence telling the seller what this scene shows (e.g. "لابس الكوتشي وماشي ناحية الكاميرا").',
+    '',
     'Return exactly this JSON shape:',
-    '{"product": {"what": string, "usage": string, "details": string}, "hook": string, "cta": string, "scenes": [{"camera": string, "visual": string, "motion": string, "voiceover": string}]}',
+    '{"product": {"what": string, "usage": string, "details": string}, "hooks": [{"text": string, "angle": string, "score": number, "why": string}], "hookIndex": number, "hook": string, "cta": string, "scenes": [{"shotAr": string, "camera": string, "visual": string, "motion": string, "voiceover": string}]}',
+    '"hooks" are in Egyptian Arabic ("why" is one short Arabic reason), "hookIndex" is the chosen one (0-4).',
     '"product" is in English: "usage" = how it is held and used, "details" = its exact look.',
   ].filter((l) => l !== null).join('\n');
 }
 
-function parseJsonObject(text) {
+export function parseJsonObject(text) {
   const raw = String(text || '');
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
@@ -196,7 +235,7 @@ function parseJsonObject(text) {
 
 async function askOpenAi(key, user, imageDataUrl, system = SYSTEM) {
   const content = [{ type: 'text', text: user }];
-  if (imageDataUrl) content.push({ type: 'image_url', image_url: { url: imageDataUrl } });
+  for (const url of [].concat(imageDataUrl || [])) content.push({ type: 'image_url', image_url: { url } });
   const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -211,14 +250,20 @@ async function askOpenAi(key, user, imageDataUrl, system = SYSTEM) {
   return data.choices?.[0]?.message?.content;
 }
 
+/** One vision-model call (OpenAI when its key is set, else an LLM on fal); returns the raw reply text. */
+export async function askVision(user, imageDataUrls, system, temperature = 0.4) {
+  const key = env.openAiKey();
+  return key ? askOpenAi(key, user, imageDataUrls, system) : askFal(user, imageDataUrls, system, temperature);
+}
+
 async function askFal(user, imageDataUrl, system = SYSTEM, temperature = 0.8) {
   const out = await fal.run('openrouter/router/vision', {
     model: env.scriptModel(),
     system_prompt: system,
     prompt: user,
-    image_urls: imageDataUrl ? [imageDataUrl] : [],
+    image_urls: [].concat(imageDataUrl || []),
     temperature,
-    max_tokens: 2500,
+    max_tokens: 4000,
   });
   return out?.output;
 }
@@ -226,6 +271,7 @@ async function askFal(user, imageDataUrl, system = SYSTEM, temperature = 0.8) {
 const PROOFREAD = [
   'You proofread Egyptian Arabic (عامية مصرية) lines that a voice will speak in a video ad.',
   'Fix every line so that: it is correct, natural Egyptian as people really say it; every sentence is complete and makes sense; it uses only common everyday words that are easy to pronounce (replace rare, formal or hard words with simple ones); it sounds like a real person, not an ad and not an AI.',
+  'Pick the word an Egyptian really uses (e.g. "نعلها طري" not "نعلها ناعم", "جزمة" or "كوتشي" not "حذاء"). Never repeat the same word twice close together. A price reads like "سعرها خمس مية جنيه بس، بدل تمن مية": hundreds as two words, never a ب stuck to the number, never "بخصم خمسمية". Remove any made-up number or time that is not in the seller\'s description.',
   'Keep the meaning, the order and the facts. Never add a feature, number, brand, guarantee or price that is not already in the line. Prices and numbers stay written as Egyptian words.',
   'Keep each line at or under its word limit.',
   'Then, for the voice only, write each corrected line again in "spoken" with Arabic diacritics (تشكيل) on the words a voice could read wrong (e.g. "شَنطِتك", "هيِوَفّر"); leave every other word and all letters exactly the same.',
@@ -239,16 +285,20 @@ function withSpoken(voiceover, spoken) {
   return marked && marked !== voiceover && plain(marked) === plain(voiceover) ? { spoken: marked } : {};
 }
 
-/** A second pass over the spoken lines: fixes mistakes and hard words. Falls back to the lines as they are. */
-async function proofread(scenes, limits, offer, imageDataUrl) {
+/**
+ * A second pass over the spoken lines: fixes mistakes and hard words, and the
+ * problems the automatic review found (`issues`). Falls back to the lines as they are.
+ */
+async function proofread(scenes, limits, offer, imageDataUrl, { issues = [], facts = '' } = {}) {
   const user = [
-    offer ? `The price/offer must stay exactly as: "${speakNumbers(offer)}"` : '',
+    offer ? `The price/offer must stay exactly as: "${speakOffer(offer)}"` : 'No price was given: the lines must not say any price.',
+    facts ? `The only true facts about the product: ${facts}` : '',
+    issues.length ? `An automatic review found these problems, fix every one of them:\n${issues.map((x) => `- ${x.message}`).join('\n')}` : '',
     'Lines (with word limits):',
     ...scenes.map((s, i) => `${i + 1}. (max ${limits[i]} words) ${s.voiceover}`),
   ].filter(Boolean).join('\n');
   try {
-    const key = env.openAiKey();
-    const reply = key ? await askOpenAi(key, user, imageDataUrl, PROOFREAD) : await askFal(user, imageDataUrl, PROOFREAD, 0.2);
+    const reply = await askVision(user, imageDataUrl, PROOFREAD, 0.2);
     const { lines, spoken } = parseJsonObject(reply) || {};
     if (!Array.isArray(lines) || lines.length !== scenes.length || lines.some((l) => !String(l || '').trim())) return scenes;
     return scenes.map((s, i) => {
@@ -261,22 +311,72 @@ async function proofread(scenes, limits, offer, imageDataUrl) {
   }
 }
 
-export async function writeScript({ productName, description, offer, style, goal, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode }) {
-  const openAiKey = env.openAiKey();
+// The chosen hook follows scene 1 when the proofread reworded it.
+function syncHook(script) {
+  if (!script.hooks?.length) return script;
+  const first = script.scenes[0].voiceover;
+  let i = script.hooks.findIndex((h) => first.startsWith(h.text));
+  if (i < 0) {
+    i = Math.max(0, script.hookIndex);
+    const opening = (first.match(/^[^.!؟?]+[.!؟?]?/) || [first])[0].trim();
+    script.hooks[i] = { ...script.hooks[i], text: opening };
+  }
+  return { ...script, hookIndex: i };
+}
+
+/**
+ * Writes the script: product study, 5 scored hooks, scenes; then a proofread
+ * pass, the automatic review, and one more fixing pass if the review found
+ * problems. `checks` says what was verified and what is still wrong.
+ */
+export async function writeScript({ productName, description, details, offer, style, goal, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode, analysis = null }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
-  if (!openAiKey && !env.falKey()) return templateScript({ productName, description, offer, clipCount, sceneSeconds, pace });
-  const user = scriptRequest({ productName, description, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode });
+  const facts = factsOf({ productName, description, details, analysis });
+  const review = (script) => ({ ...script, checks: checkScript({ scenes: script.scenes, limits, offer, facts }) });
+  if (!env.openAiKey() && !env.falKey()) return review(templateScript({ productName, description, offer, clipCount, sceneSeconds, pace }));
+  const user = scriptRequest({ productName, description, details, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode, analysis });
   try {
-    const reply = openAiKey ? await askOpenAi(openAiKey, user, imageDataUrl) : await askFal(user, imageDataUrl);
-    const parsed = normalize(parseJsonObject(reply), clipCount, limits);
-    if (parsed) {
-      parsed.scenes = await proofread(parsed.scenes, limits, offer, imageDataUrl);
-      return { ...parsed, hook: parsed.scenes[0].voiceover, cta: parsed.scenes.at(-1).voiceover };
+    const parsed = normalize(parseJsonObject(await askVision(user, imageDataUrl, SYSTEM, 0.8)), clipCount, limits);
+    if (!parsed) throw new Error('script JSON missing scenes');
+    const firstImage = [].concat(imageDataUrl || [])[0];
+    let script = { ...parsed, scenes: await proofread(parsed.scenes, limits, offer, firstImage, { facts }) };
+    let checked = review(script);
+    if (!checked.checks.ok) {
+      script = { ...script, scenes: await proofread(script.scenes, limits, offer, firstImage, { facts, issues: checked.checks.issues }) };
+      checked = review(script);
     }
-    throw new Error('script JSON missing scenes');
+    return syncHook({ ...checked, hook: checked.scenes[0].voiceover, cta: checked.scenes.at(-1).voiceover });
   } catch (err) {
     console.warn('[script] AI script failed, using template:', err.message);
-    return templateScript({ productName, description, offer, clipCount, sceneSeconds, pace });
+    return review(templateScript({ productName, description, offer, clipCount, sceneSeconds, pace }));
+  }
+}
+
+const REWRITE = [
+  'You rewrite ONE line of an Egyptian Arabic (عامية مصرية) video ad so it is better: more natural, more persuasive, easy to say.',
+  'Keep its role in the ad (hook / benefit / offer), keep it true to the facts given, keep the price exactly as given, never invent features, numbers or prices.',
+  'Do not repeat words used in the lines around it. Short sentences, everyday Egyptian words, written numbers as words.',
+  'Reply with one JSON object only: {"line": string}',
+].join(' ');
+
+/** A fresh version of one line; null when the model is not available or fails. */
+export async function rewriteLine({ productName, description, details, offer, goal, analysis, lines, index, limit, imageDataUrl }) {
+  if (!env.openAiKey() && !env.falKey()) return null;
+  const role = index === 0 ? 'the hook (first words must stop the scroll)' : index === lines.length - 1 ? 'the offer and the call to order' : 'the benefits, with the product in use';
+  const user = [
+    GOAL_DIRECTION[goal] || GOAL_DIRECTION.SALES,
+    `True facts: ${factsOf({ productName, description, details, analysis })}`,
+    offer ? `Price/offer, said exactly as: "${speakOffer(offer)}"` : 'No price was given: never say a price.',
+    'The ad:',
+    ...lines.map((l, i) => `${i + 1}. ${i === index ? '>>> ' : ''}${l}`),
+    `Rewrite line ${index + 1} (${role}) in at most ${limit} words.`,
+  ].join('\n');
+  try {
+    const out = String(parseJsonObject(await askVision(user, imageDataUrl, REWRITE, 0.9))?.line || '').replace(/\s+/g, ' ').trim();
+    return out ? fitLine(out, limit) : null;
+  } catch (err) {
+    console.warn('[script] rewrite failed:', err.message);
+    return null;
   }
 }
 

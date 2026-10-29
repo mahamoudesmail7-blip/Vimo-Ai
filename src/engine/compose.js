@@ -93,3 +93,40 @@ export async function composeHybrid({ clipUrl, clipSeconds, photos, photoSeconds
     fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
+
+// Veo blurs the last ~0.6 second of a clip into a ghost of the next shot;
+// that tail is replaced by a still of the last clean frame (the voice keeps playing).
+export const TAIL_SECONDS = 0.7;
+
+/**
+ * Joins the talking clips on our server with hard cuts, hiding each clip's
+ * blurred tail. Returns the MP4, or throws (the caller then joins on fal).
+ * @param {{url: string, seconds: number}[]} clips
+ */
+export async function joinClips(clips, aspectRatio = '9:16') {
+  if (!ffmpegPath()) throw new EngineError('ffmpeg مش موجود على السيرفر.', 'NO_FFMPEG', null, 'local');
+  const [W, H] = aspectRatio === '16:9' ? [1280, 720] : [720, 1280];
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vimo-join-'));
+  try {
+    const args = ['-y', '-loglevel', 'error'];
+    for (const [i, c] of clips.entries()) {
+      const f = path.join(dir, `c${i}.mp4`);
+      await fs.writeFile(f, await toBuffer(c.url));
+      args.push('-i', f);
+    }
+    const fit = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=${FPS},setsar=1,format=yuv420p`;
+    const filters = clips.map((c, i) => {
+      const keep = Math.max(1, c.seconds - TAIL_SECONDS);
+      return `[${i}:v]trim=duration=${keep},setpts=PTS-STARTPTS,${fit},tpad=stop_mode=clone:stop_duration=${c.seconds - keep}[v${i}];`
+        + `[${i}:a]aresample=48000,apad,atrim=duration=${c.seconds},asetpts=PTS-STARTPTS[a${i}]`;
+    });
+    filters.push(`${clips.map((_, i) => `[v${i}][a${i}]`).join('')}concat=n=${clips.length}:v=1:a=1[v][a]`);
+    const out = path.join(dir, 'out.mp4');
+    args.push('-filter_complex', filters.join(';'), '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+      '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out);
+    await run(args);
+    return await fs.readFile(out);
+  } finally {
+    fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}

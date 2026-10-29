@@ -18,15 +18,17 @@ import { env } from '../config.js';
 import { AppError } from '../errors.js';
 import { applyCredits, refundVideo } from './credits.js';
 import { parseDataUrl, putBuffer, getDataUrl, IMAGE_MIMES } from './storage.js';
-import { writeScript, scenePrompt, keyframePrompt, userScript, wordsFor, GOALS, NEGATIVE_PROMPT } from './script.js';
+import { writeScript, scenePrompt, keyframePrompt, userScript, wordsFor, GOALS, NEGATIVE_PROMPT, factsOf, rewriteLine } from './script.js';
+import { analyzeProduct, readAnalysis } from './analyze.js';
+import { checkScript } from './scriptCheck.js';
 import { planVideo, checkBudget, loadSettings, submitStep, pollStep } from '../engine/index.js';
 import { modelByEndpoint } from '../engine/catalog.js';
 import { recordEvent } from '../engine/budget.js';
 import { EngineError, isTransient } from '../engine/errors.js';
 import { toBuffer } from '../engine/media.js';
-import { composeHybrid, ffmpegPath } from '../engine/compose.js';
+import { composeHybrid, joinClips, ffmpegPath } from '../engine/compose.js';
 import { captionCues, toAss, burnCaptions } from '../engine/captions.js';
-import { speakNumbers } from './numbers.js';
+import { speakNumbers, speakOffer } from './numbers.js';
 import { checkClip, passes, STT_MODEL, STT_USD } from '../engine/speechCheck.js';
 
 export const TERMINAL = ['COMPLETED', 'FAILED'];
@@ -41,19 +43,23 @@ const running = new Set();
 
 function readInputs(body) {
   const description = String(body.description || '').trim().slice(0, 1500) || null;
-  // The product name is optional now: the first words of the description stand in.
+  const analysis = readAnalysis(body.analysis);
+  // The product name is optional now: the first words of the description (or what the photos showed) stand in.
   let productName = String(body.productName || '').trim();
   if (!productName && description) productName = description.split(/[.\n،,!؟?]/)[0].split(/\s+/).slice(0, 5).join(' ');
+  if (!productName && analysis?.productAr) productName = analysis.productAr;
   if (productName.length < 2) throw new AppError('اكتب وصف قصير للمنتج.');
   if (productName.length > 120) throw new AppError('اسم المنتج طويل جدًا.');
   return {
     productName,
     description,
     offer: String(body.offer || '').trim().slice(0, 200) || null,
+    details: String(body.details || '').trim().slice(0, 500) || null,
+    analysis,
     style: STYLES.includes(body.style) ? body.style : 'AUTO',
     aspectRatio: RATIOS.includes(body.aspectRatio) ? body.aspectRatio : '9:16',
     voiceGender: body.voiceGender === 'FEMALE' ? 'FEMALE' : 'MALE',
-    options: { music: body.music === 'light' ? 'light' : 'none', pace: body.pace === 'fast' ? 'fast' : 'normal', goal: GOALS.includes(body.goal) ? body.goal : 'SALES' },
+    options: { music: body.music === 'light' ? 'light' : 'none', pace: body.pace === 'fast' ? 'fast' : 'normal', goal: GOALS.includes(body.goal) ? body.goal : 'SALES', details: String(body.details || '').trim().slice(0, 500) || null },
   };
 }
 
@@ -103,12 +109,42 @@ async function resolveStyle(userId, inputs) {
 /** Write the script for the customer to read and edit before paying a credit. */
 export async function previewScript(body, userId = null) {
   const inputs = await resolveStyle(userId, readInputs(body));
-  const [image] = readImages(body);
+  const images = readImages(body);
   const settings = await loadSettings();
   const { plan } = planVideo({ style: inputs.style, pace: inputs.options.pace, settings });
   const sceneSeconds = plan?.sceneSeconds || Array(env.defaultClipCount()).fill(env.clipSeconds());
-  const script = await writeScript({ ...inputs, clipCount: sceneSeconds.length, sceneSeconds, pace: inputs.options.pace, goal: inputs.options.goal, mode: plan?.mode, imageDataUrl: image.dataUrl });
-  return { ...script, maxWords: wordsFor(Math.max(...sceneSeconds), inputs.options.pace), sceneSeconds, clipSeconds: sceneSeconds[0] };
+  const script = await writeScript({ ...inputs, clipCount: sceneSeconds.length, sceneSeconds, pace: inputs.options.pace, goal: inputs.options.goal, mode: plan?.mode, imageDataUrl: images.map((i) => i.dataUrl) });
+  return { ...script, maxWords: wordsFor(Math.max(...sceneSeconds), inputs.options.pace), limits: sceneSeconds.map((x) => wordsFor(x, inputs.options.pace)), sceneSeconds, clipSeconds: sceneSeconds[0], style: inputs.style, price: priceLine(inputs.offer) };
+}
+
+/** The price as it shows on screen (as the seller wrote it) and as it will be said. */
+const priceLine = (offer) => (offer ? { screen: offer, spoken: speakOffer(offer) } : null);
+
+/** Reads the product from its photos and suggests an editable description (free to the customer). */
+export async function analyzeImages(body) {
+  const images = readImages(body);
+  return { analysis: await analyzeProduct(images.map((i) => i.dataUrl)) };
+}
+
+/** The automatic review of a script the customer edited (no AI, free). */
+export async function reviewScript(body) {
+  const inputs = readInputs(body);
+  const scenes = (Array.isArray(body.script?.scenes) ? body.script.scenes : []).map((x) => ({ voiceover: String(x?.voiceover || '') }));
+  const limits = (Array.isArray(body.limits) ? body.limits : []).map(Number);
+  return checkScript({ scenes, limits, offer: inputs.offer, facts: factsOf(inputs) });
+}
+
+/** A new version of one line of the script, same length, same facts. */
+export async function rewriteScriptLine(body) {
+  const inputs = readInputs(body);
+  const [image] = readImages(body);
+  const scenes = (Array.isArray(body.script?.scenes) ? body.script.scenes : []).map((x) => String(x?.voiceover || ''));
+  const index = Number(body.index);
+  if (!Number.isInteger(index) || index < 0 || index >= scenes.length) throw new AppError('رقم المشهد غلط.');
+  const limit = Math.max(8, Math.min(30, Number(body.limit) || 14));
+  const line = await rewriteLine({ ...inputs, goal: inputs.options.goal, lines: scenes, index, limit, imageDataUrl: image.dataUrl });
+  if (!line) throw new AppError('مقدرناش نكتب الجملة دي دلوقتي، جرّب تاني.', 503, 'REWRITE_FAILED');
+  return { voiceover: line, checks: checkScript({ scenes: scenes.map((v, i) => ({ voiceover: i === index ? line : v })), offer: inputs.offer, facts: factsOf(inputs) }) };
 }
 
 async function insertJob(userId, inputs, { imageKey, imageMime, extraImageKeys = [], script = null, plan, settings, clientRef = null }) {
@@ -153,12 +189,11 @@ export async function createVideo(userId, body) {
   }
   const inputs = await resolveStyle(userId, readInputs(body));
   const { plan, settings } = await planOrRefuse(inputs);
-  let script = null;
-  if (body.script) {
-    const checked = userScript(body.script, plan.sceneSeconds.length, { sceneSeconds: plan.sceneSeconds, pace: inputs.options.pace });
-    if (checked.error) throw new AppError(checked.error);
-    script = checked.script;
-  }
+  // Nothing paid starts before the customer has read (and approved) the script and the price.
+  if (!body.script) throw new AppError('اكتب السكريبت وراجعه الأول، وبعدين اعمل الفيديو.', 400, 'SCRIPT_REQUIRED');
+  const checked = userScript(body.script, plan.sceneSeconds.length, { sceneSeconds: plan.sceneSeconds, pace: inputs.options.pace });
+  if (checked.error) throw new AppError(checked.error);
+  const script = checked.script;
   const images = readImages(body);
   const stored = [];
   for (const img of images) stored.push(await putBuffer(img.buffer, img.mime, 'products'));
@@ -180,10 +215,12 @@ export async function remakeVideo(userId, sourceId, { sameScript = true } = {}) 
   const options = parse(src.options_json) || { music: 'none', pace: 'fast' };
   const inputs = { productName: src.product_name, description: src.description, offer: src.offer, style: src.style, aspectRatio: src.aspect_ratio, voiceGender: src.voice_gender, options };
   const { plan, settings } = await planOrRefuse(inputs);
-  const script = sameScript ? parse(src.script_json) : null;
+  const script = parse(src.script_json);
+  // a re-make is always the approved script; a new script goes through the create page
+  if (!sameScript || script?.scenes?.length !== plan.sceneSeconds.length) throw new AppError('الفيديو ده محتاج سكريبت جديد: اعمله من صفحة «إنشاء فيديو».', 400, 'SCRIPT_REQUIRED');
   return insertJob(userId, inputs, {
     imageKey: src.image_key, imageMime: src.image_mime, extraImageKeys: parse(src.extra_image_keys) || [], plan, settings,
-    script: script?.scenes?.length === plan.sceneSeconds.length ? script : null,
+    script,
   });
 }
 
@@ -316,7 +353,7 @@ async function startJob(job) {
   if (!script) {
     script = await writeScript({
       productName: job.product_name, description: job.description, offer: job.offer, style: job.style,
-      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, goal: options.goal, mode: plan.mode, imageDataUrl: images[0],
+      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, goal: options.goal, details: options.details, mode: plan.mode, imageDataUrl: images, // every photo: colors and variants show up in the script
     });
     const scriptLine = plan.estimate.lines.find((l) => l.step === 'script');
     if (script.source === 'AI' && scriptLine) {
@@ -476,6 +513,16 @@ async function pollClips(job, images = null) {
   }
   if (clips.length === 1) return afterMerge(job, plan, clips[0].url);
 
+  // Talking clips are joined here with hard cuts (hides Veo's blurred clip ends); fal joins them if that fails.
+  if (plan.mode === 'speech' && ffmpegPath()) {
+    try {
+      const joined = await joinClips(clips.map((c) => ({ url: c.url, seconds: c.seconds })), job.aspect_ratio);
+      const tmp = await putBuffer(joined, 'video/mp4', 'joined'); // captions are still burned in when it is stored
+      return afterMerge(job, plan, `blob:${tmp.key}`);
+    } catch (err) {
+      console.warn(`[worker] job ${job.id}: local join failed, joining on fal:`, err.message);
+    }
+  }
   const merge = { key: 'merge' };
   await submitStep(job, merge, plan.models.merge, 'merge', { videoUrls: clips.map((c) => c.url) }, { seconds: plan.seconds });
   return save(job, { status: 'MERGING', progress: 82, merge_json: JSON.stringify(merge) });
@@ -529,6 +576,7 @@ async function storeVideo(job) {
     return save(job, { status: 'COMPLETED', progress: 100, video_key: ref.slice(5), video_bytes: blob?.bytes || null, finished_at: new Date(), error: null });
   }
   const stored = await putBuffer(await withCaptions(job, await toBuffer(ref)), 'video/mp4', 'videos');
+  if (ref.startsWith('blob:joined/')) await prisma.blob.delete({ where: { key: ref.slice(5) } }).catch(() => {});
   return save(job, { status: 'COMPLETED', progress: 100, video_key: stored.key, video_bytes: stored.bytes, finished_at: new Date(), error: null });
 }
 
