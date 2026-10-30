@@ -60,9 +60,13 @@ function readInputs(body) {
     style: STYLES.includes(body.style) ? body.style : 'AUTO',
     aspectRatio: RATIOS.includes(body.aspectRatio) ? body.aspectRatio : '9:16',
     voiceGender: body.voiceGender === 'FEMALE' ? 'FEMALE' : 'MALE',
-    options: { music: body.music === 'light' ? 'light' : 'none', pace: body.pace === 'fast' ? 'fast' : 'normal', goal: GOALS.includes(body.goal) ? body.goal : 'SALES', details: String(body.details || '').trim().slice(0, 500) || null, problem: String(body.problem || '').trim().slice(0, 800) || null },
+    age: ageOf(body.age),
+    options: { age: ageOf(body.age), music: body.music === 'light' ? 'light' : 'none', pace: body.pace === 'fast' ? 'fast' : 'normal', goal: GOALS.includes(body.goal) ? body.goal : 'SALES', details: String(body.details || '').trim().slice(0, 500) || null, problem: String(body.problem || '').trim().slice(0, 800) || null },
   };
 }
+
+// how old the person in the ad looks (20-60); 28 when not chosen
+const ageOf = (v) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.min(60, Math.max(20, Math.round(Number(v)))) : 28);
 
 function readImage(dataUrl) {
   const { mime, buffer } = parseDataUrl(dataUrl);
@@ -354,7 +358,7 @@ async function startJob(job) {
   if (!script) {
     script = await writeScript({
       productName: job.product_name, description: job.description, offer: job.offer, style: job.style,
-      voiceGender: job.voice_gender, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, goal: options.goal, details: options.details, problem: options.problem, mode: plan.mode, imageDataUrl: images, // every photo: colors and variants show up in the script
+      voiceGender: job.voice_gender, age: options.age, clipCount: plan.sceneSeconds.length, sceneSeconds: plan.sceneSeconds, pace: options.pace, goal: options.goal, details: options.details, problem: options.problem, mode: plan.mode, imageDataUrl: images, // every photo: colors and variants show up in the script
     });
     const scriptLine = plan.estimate.lines.find((l) => l.step === 'script');
     if (script.source === 'AI' && scriptLine) {
@@ -365,7 +369,7 @@ async function startJob(job) {
   const videoModel = plan.models.video;
   const withScene = /ref/.test(videoModel);
   const hybrid = plan.mode === 'hybrid';
-  const opts = { style: job.style, voiceGender: job.voice_gender, aspectRatio: job.aspect_ratio, product: script.product, withScene, mode: hybrid ? 'voiceover' : plan.mode, music: options.music, pace: options.pace };
+  const opts = { style: job.style, voiceGender: job.voice_gender, age: options.age, aspectRatio: job.aspect_ratio, product: script.product, withScene, mode: hybrid ? 'voiceover' : plan.mode, music: options.music, pace: options.pace };
   const withFrames = Boolean(plan.models.image);
   // Hybrid: only the first scene is an AI clip; the others are photo scenes rendered at the end.
   const clips = script.scenes.map((scene, index) => (hybrid && index > 0 ? { key: `photo${index}`, index, kind: 'photo', seconds: plan.sceneSeconds[index], status: 'COMPLETED' } : {

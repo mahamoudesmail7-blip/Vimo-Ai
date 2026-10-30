@@ -164,11 +164,11 @@ export function factsOf({ productName, description, details, problem, analysis }
   return [productName, description, details, problem, ...(analysis?.confirmed || []), ...(analysis?.colors || [])].filter(Boolean).join(' . ');
 }
 
-function scriptRequest({ productName, description, details, problem, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode = 'speech', analysis = null }) {
+function scriptRequest({ productName, description, details, problem, offer, style, goal, voiceGender, age, clipCount, sceneSeconds, pace, mode = 'speech', analysis = null }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
   const secs = Array.from({ length: clipCount }, (_, i) => sceneSeconds?.[i] || env.clipSeconds());
   const voiceover = mode === 'voiceover' || mode === 'hybrid';
-  const speaker = voiceGender === 'FEMALE' ? 'a young Egyptian woman (around 25-35)' : 'a young Egyptian man (around 25-35)';
+  const speaker = speakerOf(voiceGender, age);
   return [
     `Product name: ${productName}`,
     description ? `Seller's description: ${description}` : '',
@@ -181,7 +181,7 @@ function scriptRequest({ productName, description, details, problem, offer, styl
     offer ? `Offer / price (must be said in the last scene, with exactly these prices, spoken like this: "${speakOffer(offer)}"): ${offer}` : 'No price was given: do not say any price or discount.',
     `Ad style: ${STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC}`,
     GOAL_DIRECTION[goal] || GOAL_DIRECTION.SALES,
-    voiceover ? `Voice: ${speaker} reads the lines as a voiceover over the footage; nobody talks on camera, people only react naturally.` : `Speaker: ${speaker}.`,
+    voiceover ? `Voice: ${speaker} reads the lines as a voiceover over the footage; nobody talks on camera, people only react naturally.` : `Speaker: ${speaker}. Every scene's "visual" shows this person at exactly this age, and the words fit how someone that age talks.`,
     '',
     'STEP 1. Study ALL the attached product photos closely before writing anything:',
     '- what the product really is, who buys it, and the everyday moments it makes better (e.g. for shoes: work, outings, long walks; for a kitchen tool: cooking for the family);',
@@ -343,12 +343,12 @@ function syncHook(script) {
  * pass, the automatic review, and one more fixing pass if the review found
  * problems. `checks` says what was verified and what is still wrong.
  */
-export async function writeScript({ productName, description, details, problem, offer, style, goal, voiceGender, clipCount, imageDataUrl, sceneSeconds, pace, mode, analysis = null }) {
+export async function writeScript({ productName, description, details, problem, offer, style, goal, voiceGender, age, clipCount, imageDataUrl, sceneSeconds, pace, mode, analysis = null }) {
   const limits = limitsOf(clipCount, sceneSeconds, pace);
   const facts = factsOf({ productName, description, details, problem, analysis });
   const review = (script) => ({ ...script, checks: checkScript({ scenes: script.scenes, limits, offer, facts }) });
   if (!env.openAiKey() && !env.falKey()) return review(templateScript({ productName, description, offer, clipCount, sceneSeconds, pace }));
-  const user = scriptRequest({ productName, description, details, problem, offer, style, goal, voiceGender, clipCount, sceneSeconds, pace, mode, analysis });
+  const user = scriptRequest({ productName, description, details, problem, offer, style, goal, voiceGender, age, clipCount, sceneSeconds, pace, mode, analysis });
   try {
     const parsed = normalize(parseJsonObject(await askVision(user, imageDataUrl, SYSTEM, 0.8)), clipCount, limits);
     if (!parsed) throw new Error('script JSON missing scenes');
@@ -395,14 +395,21 @@ export async function rewriteLine({ productName, description, details, problem, 
   }
 }
 
-const SPEAKER = { FEMALE: 'a young Egyptian woman', MALE: 'a young Egyptian man' };
+/** The person in the ad, at the age the seller chose (20-60). */
+export function speakerOf(voiceGender, age) {
+  const a = Number(age) || 28;
+  const who = voiceGender === 'FEMALE' ? 'woman' : 'man';
+  const look = a < 30 ? 'a young Egyptian' : a < 45 ? 'an Egyptian' : 'a mature Egyptian';
+  const signs = a >= 50 ? ', with grey hair and the face of someone that age' : a >= 40 ? ', with a few grey hairs and the face of someone that age' : '';
+  return `${look} ${who} who is about ${a} years old${signs}`;
+}
 
 /** The image-edit prompt that turns the product photo into a scene's first frame. */
-export function keyframePrompt(scene, { product, style, voiceGender, aspectRatio }) {
+export function keyframePrompt(scene, { product, style, voiceGender, age, aspectRatio }) {
   return [
     'Create one photorealistic photo that looks like a real frame from a smartphone video, not an advert render.',
     `Scene: ${scene.visual}`,
-    style !== 'SHOWCASE' ? `The person is ${SPEAKER[voiceGender] || SPEAKER.MALE}, with natural skin texture and real proportions.` : '',
+    style !== 'SHOWCASE' ? `The person is ${speakerOf(voiceGender, age)}, with natural skin texture and real proportions.` : '',
     'The product in the reference image must appear in the scene EXACTLY as it is: same shape, proportions, colors, materials, every part, logo and label text. Do not redesign, simplify, recolor or add anything to it.',
     product?.details ? `Product look: ${product.details}` : '',
     product?.usage ? `It is held and used like this: ${product.usage}` : '',
@@ -416,7 +423,7 @@ export function keyframePrompt(scene, { product, style, voiceGender, aspectRatio
  * frame, or with `withScene` (Ingredients mode) it builds the scene from the
  * reference images, so the scene is described too.
  */
-export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, withScene = false, mode = 'speech', music = 'none', pace = 'normal' }) {
+export function scenePrompt(scene, { style, voiceGender, age, aspectRatio, product, withScene = false, mode = 'speech', music = 'none', pace = 'normal' }) {
   const speech = pace !== 'fast'
     ? 'in Egyptian Arabic dialect, like a real person talking to a friend: relaxed, warm and clear at a normal talking speed (not rushed), pronouncing every word clearly, with matching lip movement, finishing the line before the clip ends'
     : 'in Egyptian Arabic dialect, speaking quickly (a brisk, rapid delivery, never slow or drawn out) and energetic like a fast-paced TikTok ad, clearly, with no pauses and matching lip movement, finishing the line before the clip ends';
@@ -427,7 +434,7 @@ export function scenePrompt(scene, { style, voiceGender, aspectRatio, product, w
     scene.motion || scene.visual,
     mode === 'voiceover'
       ? 'Nobody speaks in this clip: no dialogue and no lip movement; people only react naturally. Silent footage.'
-      : `${SPEAKER[voiceGender] || SPEAKER.MALE} looks at the camera and says ${speech}: "${speakNumbers(scene.spoken || scene.voiceover)}"`,
+      : `${speakerOf(voiceGender, age)} (with a natural voice for that age) looks at the camera and says ${speech}: "${speakNumbers(scene.spoken || scene.voiceover)}"`,
     mode === 'speech' ? (music === 'light' ? 'Light upbeat background music, quiet under the voice.' : 'No background music, only the voice and natural room sound.') : '',
     'The product must look exactly like the reference image for the whole clip: same shape, colors, logo, label and packaging. It does not morph, bend, melt or change; do not add or remove any part of the product.',
     product?.usage ? `It is used like this: ${product.usage}` : '',

@@ -6,7 +6,7 @@ import { reveal, slider, aiSteps } from '/js/motion.js';
 const MAX_PHOTOS = 4;
 const newRef = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, '');
 const blankForm = (keep = {}) => ({
-  images: [], description: '', style: 'AUTO', goal: 'SALES', aspectRatio: '9:16', voiceGender: 'MALE', music: 'none', offer: '', details: '', problem: '', analysis: null, autoDesc: '', script: null,
+  images: [], description: '', style: 'AUTO', goal: 'SALES', aspectRatio: '9:16', voiceGender: 'MALE', age: 28, music: 'none', offer: '', details: '', problem: '', analysis: null, autoDesc: '', script: null,
   ...keep, clientRef: newRef(),
 });
 const state = { me: null, cfg: null, quote: null, poll: null, form: blankForm() };
@@ -146,6 +146,10 @@ async function renderCreate(view) {
       ${step(4, 'الكلام', `<div class="sub-label label">عايز الكلام يكون إزاي؟</div>
         <div class="goals" role="radiogroup">${GOAL_OPTS.map(([v, t, d]) => `<button type="button" class="goal-opt ${f.goal === v ? 'active' : ''}" data-goal="${v}" role="radio" aria-checked="${f.goal === v}"><b>${t}</b><span>${d}</span></button>`).join('')}</div>
         <div class="adv-row" style="margin-top:14px"><span class="label">مين بيتكلم</span>${seg('voiceGender', [['MALE', 'راجل'], ['FEMALE', 'ست']])}</div>
+        <div class="age-row"><label class="label" for="age">سنه كام؟ <b id="ageVal"></b></label>
+          <input id="age" type="range" min="20" max="60" step="1" value="${f.age}" />
+          <div class="age-ends"><span>٢٠ سنة</span><span>٤٠</span><span>٦٠ سنة</span></div>
+          <div class="hint">اختار سن يناسب اللي هيشتري: شباب للتيشرتات والموضة، أكبر لمنتجات الصحة وكبار السن.</div></div>
         <div id="scriptBox"></div>`)}
       <details class="advanced" id="advanced">
         <summary>إعدادات إضافية</summary>
@@ -250,6 +254,14 @@ async function renderCreate(view) {
       if (b.dataset.seg === 'voiceGender') { f.script = null; drawScript(); }
     };
   });
+  const ageEl = $('#age');
+  const ageText = () => {
+    const n = Number(ageEl.value);
+    $('#ageVal').textContent = `${n.toLocaleString('ar-EG')} سنة (${n < 30 ? 'شاب' : n < 45 ? 'متوسط' : 'أكبر في السن'})`;
+  };
+  ageText();
+  ageEl.oninput = () => { f.age = Number(ageEl.value); ageText(); };
+  ageEl.onchange = () => { if (f.script) { f.script = null; drawScript(); } };
   for (const id of ['description', 'problem', 'offer', 'details']) { const el = $(`#${id}`); el.value = f[id] || ''; el.oninput = () => { f[id] = el.value; }; }
   if (f.aspectRatio !== '9:16' || f.music !== 'none') $('#advanced').open = true;
   $$('.goal-opt', view).forEach((b) => {
@@ -263,7 +275,7 @@ async function renderCreate(view) {
 
   const inputs = () => ({
     images: f.images, description: f.description, problem: f.problem, offer: f.offer, details: f.details, analysis: f.analysis || undefined,
-    style: f.style, goal: f.goal, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender, music: f.music,
+    style: f.style, goal: f.goal, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender, age: f.age, music: f.music,
   });
   const hasProduct = () => f.description.trim() || f.analysis?.productAr;
 
@@ -403,7 +415,7 @@ async function renderCreate(view) {
     try {
       // clientRef: pressing twice (or a retry after a slow network) is still one video and one charge.
       await api('POST', '/api/videos', { ...inputs(), clientRef: f.clientRef, script: { product: f.script.product, scenes: f.script.scenes } });
-      state.form = blankForm({ style: f.style, goal: f.goal, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender, music: f.music });
+      state.form = blankForm({ style: f.style, goal: f.goal, aspectRatio: f.aspectRatio, voiceGender: f.voiceGender, age: f.age, music: f.music });
       await refreshMe();
       toast('بدأنا نعمل الفيديو');
       location.hash = 'videos';

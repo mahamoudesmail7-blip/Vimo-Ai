@@ -321,3 +321,9 @@ details.advanced .adv-body { padding-top: 22px; display: grid; gap: 22px; }
 .req { color: var(--bad); font-size: 12px; font-weight: 700; margin-inline-start: 6px; }
 .err-inline { color: var(--bad); font-size: 13px; margin-top: 6px; min-height: 0; }
 textarea.need { border-color: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 18%, transparent); }
+
+/* the speaker's age slider */
+.age-row { margin-top: 14px; }
+.age-row .label b { color: var(--accent); font-weight: 700; margin-inline-start: 4px; }
+.age-row input[type=range] { width: 100%; margin: 10px 0 2px; accent-color: var(--accent); direction: ltr; height: 28px; }
+.age-ends { display: flex; justify-content: space-between; direction: ltr; font-size: 12px; color: var(--muted); }

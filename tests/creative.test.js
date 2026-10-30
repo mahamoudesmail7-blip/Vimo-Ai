@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeAnalysis, analyzeProduct, readAnalysis, USE_SCENES } from '../src/services/analyze.js';
 import { checkScript } from '../src/services/scriptCheck.js';
-import { writeScript, readHooks, rewriteLine, factsOf } from '../src/services/script.js';
+import { writeScript, readHooks, rewriteLine, factsOf, speakerOf, keyframePrompt, scenePrompt } from '../src/services/script.js';
 import { setFetch } from '../src/services/fal.js';
 
 const IMG = 'data:image/png;base64,AA';
@@ -196,5 +196,17 @@ test('26 seconds: four parts, hook, features, details, offer', async () => {
     await writeScript({ productName: 'جهاز تنظيف الأذن', offer: '500', clipCount: 4, sceneSeconds: [8, 6, 6, 6], imageDataUrl: [IMG] });
     assert.match(calls[0].body.prompt, /4-scene ad.*8, 6, 6, 6/);
     assert.match(calls[0].body.prompt, /2\) THE FEATURES[^]*3\) THE DETAILS[^]*4\) THE OFFER/);
+  });
+});
+
+test('the seller picks how old the person in the ad is (20 to 60)', async () => {
+  assert.match(speakerOf('MALE', 24), /young Egyptian man who is about 24/);
+  assert.match(speakerOf('FEMALE', 55), /mature Egyptian woman who is about 55 years old, with grey hair/);
+  const scene = { visual: 'v', motion: 'm', voiceover: 'أهلا' };
+  assert.match(keyframePrompt(scene, { voiceGender: 'MALE', age: 42, style: 'UGC' }), /about 42 years old/);
+  assert.match(scenePrompt(scene, { voiceGender: 'MALE', age: 42, style: 'UGC' }), /about 42 years old.*natural voice for that age/);
+  await withFal(() => JSON.stringify({ scenes: [] }), async (calls) => {
+    await writeScript({ productName: 'حزام تدفئة', clipCount: 3, sceneSeconds: [8, 6, 6], voiceGender: 'MALE', age: 50, imageDataUrl: [IMG] });
+    assert.match(calls[0].body.prompt, /Speaker: a mature Egyptian man who is about 50 years old/);
   });
 });
