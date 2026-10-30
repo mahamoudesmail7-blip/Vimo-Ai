@@ -10,7 +10,7 @@
 import { env } from '../config.js';
 import * as fal from './fal.js';
 import { speakNumbers, speakOffer } from './numbers.js';
-import { checkScript } from './scriptCheck.js';
+import { checkScript, minWords } from './scriptCheck.js';
 
 const STYLE_DIRECTION = {
   AUTO: 'High-converting Egyptian social ad: a real Egyptian person using the product in a real home, mixed with sharp close-ups of the product details, natural light, filmed on a smartphone.',
@@ -211,7 +211,8 @@ function scriptRequest({ productName, description, details, problem, offer, styl
     voiceover ? 'Rules for "voiceover" (the narration for that scene):' : 'Rules for "voiceover" (the line the speaker says on camera):',
     pace !== 'fast'
       ? `- Egyptian colloquial, warm and natural, like a friend recommending it, at a normal relaxed talking pace that is easy to follow. Word count per scene: ${limits.map((l, i) => `scene ${i + 1}: ${l - 4}-${l}`).join(', ')}.`
-      : `- Egyptian colloquial, warm and natural, like a friend excitedly recommending it. Fast-paced TikTok energy, short punchy phrases, said quickly with no dead air. Word count per scene: ${limits.map((l, i) => `scene ${i + 1}: ${l - 6}-${l}`).join(', ')}.`,
+      : `- Egyptian colloquial, warm and natural, like a friend excitedly recommending it. Fast-paced TikTok energy, short punchy phrases, said quickly with no dead air. Word count per scene: ${limits.map((l, i) => `scene ${i + 1}: ${l - 5}-${l}`).join(', ')}.`,
+    '- COUNT the words of every line before you answer. A line shorter than its minimum leaves the speaker silent on camera and ruins the ad; a line longer than its maximum gets cut. Fill each scene\'s time with useful words, never filler.',
     '- Specific to THIS product (use what you saw in the photo), no generic filler, do not repeat the product name in every line.',
     '- Easy to say out loud: common everyday words only, short sentences (3 to 8 words), no rare or formal words, no long words stuck together, no tongue twisters. Every sentence is complete and grammatically right.',
     '- No emoji, no hashtags, no English words unless the product name is English, no guaranteed medical or exaggerated claims.',
@@ -287,7 +288,7 @@ const PROOFREAD = [
   'Pick the word an Egyptian really uses (e.g. "نعلها طري" not "نعلها ناعم", "جزمة" or "كوتشي" not "حذاء"). Never repeat the same word twice close together. A price reads like "سعرها خمس مية جنيه بس، بدل تمن مية": hundreds as two words, never a ب stuck to the number, never "بخصم خمسمية". Remove any made-up number or time that is not in the seller\'s description.',
   'Keep the meaning, the order and the facts. Never add a feature, number, brand, guarantee or price that is not already in the line. Prices and numbers stay written as Egyptian words.',
   'Pronunciation comes first: a video voice reads these lines, so swap any word it could stumble on (English, technical, formal, rare, longer than about 9 letters, or several prefixes/suffixes stuck together) for a short common Egyptian word with the same meaning.',
-  'Keep each line at or under its word limit.',
+  'Keep each line between its minimum and maximum word count. When a line is too short, make it longer with true, useful words: say the benefit more concretely, add the feeling or the moment of use, or a natural reaction. Only use facts that are already in the lines or in the true facts given; never invent.',
   'Then, for the voice only, write each corrected line again in "spoken" with Arabic diacritics (تشكيل) on the words a voice could read wrong (e.g. "شَنطِتك", "هيِوَفّر"); leave every other word and all letters exactly the same.',
   'Reply with one JSON object only: {"lines": [string, ...], "spoken": [string, ...]} with the same number of lines in both.',
 ].join(' ');
@@ -309,7 +310,7 @@ async function proofread(scenes, limits, offer, imageDataUrl, { issues = [], fac
     facts ? `The only true facts about the product: ${facts}` : '',
     issues.length ? `An automatic review found these problems, fix every one of them:\n${issues.map((x) => `- ${x.message}`).join('\n')}` : '',
     'Lines (with word limits):',
-    ...scenes.map((s, i) => `${i + 1}. (max ${limits[i]} words) ${s.voiceover}`),
+    ...scenes.map((s, i) => `${i + 1}. (${minWords(limits[i])} to ${limits[i]} words) ${s.voiceover}`),
   ].filter(Boolean).join('\n');
   try {
     const reply = await askVision(user, imageDataUrl, PROOFREAD, 0.2);
