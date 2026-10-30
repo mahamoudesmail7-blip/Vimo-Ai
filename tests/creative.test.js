@@ -230,6 +230,7 @@ test('frames and clips: the product is really used, and a screen never shows an 
   const scene = { visual: 'v', motion: 'm', voiceover: 'أهلا' };
   assert.match(keyframePrompt(scene, { voiceGender: 'MALE', age: 45, style: 'UGC' }), /120\/80, never an alarming one/);
   assert.match(scenePrompt(scene, { voiceGender: 'MALE', age: 45, style: 'UGC' }), /never invent a brand name/);
+  assert.match(scenePrompt(scene, { voiceGender: 'MALE', style: 'UGC' }), /spread over the WHOLE clip.*no long silence/, 'no dead air after the line');
   assert.match(speakerOf('MALE', 45), /clearly not young/);
   await withFal(() => JSON.stringify({ scenes: [] }), async (calls) => {
     await writeScript({ productName: 'جهاز ضغط', clipCount: 4, sceneSeconds: [8, 6, 6, 6], imageDataUrl: [IMG] });

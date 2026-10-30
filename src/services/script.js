@@ -428,8 +428,8 @@ export function keyframePrompt(scene, { product, style, voiceGender, age, aspect
  */
 export function scenePrompt(scene, { style, voiceGender, age, aspectRatio, product, withScene = false, mode = 'speech', music = 'none', pace = 'normal' }) {
   const speech = pace !== 'fast'
-    ? 'in Egyptian Arabic dialect, like a real person talking to a friend: relaxed, warm and clear at a normal talking speed (not rushed), pronouncing every word clearly, with matching lip movement, finishing the line before the clip ends'
-    : 'in Egyptian Arabic dialect, speaking quickly (a brisk, rapid delivery, never slow or drawn out) and energetic like a fast-paced TikTok ad, clearly, with no pauses and matching lip movement, finishing the line before the clip ends';
+    ? 'in Egyptian Arabic dialect, like a real person talking to a friend: relaxed, warm and clear at a normal talking speed (not rushed), saying every word exactly as written without skipping or merging words, with matching lip movement; the line is spread over the WHOLE clip, starting right away and ending in the last second, with no long silence'
+    : 'in Egyptian Arabic dialect, speaking quickly (a brisk, rapid delivery, never slow or drawn out) and energetic like a fast-paced TikTok ad, clearly, saying every word exactly as written, with no pauses and matching lip movement, starting right away and finishing just before the clip ends';
   return [
     STYLE_DIRECTION[style] || STYLE_DIRECTION.UGC,
     `Camera: ${scene.camera || 'medium shot'}.`,
