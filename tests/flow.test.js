@@ -474,7 +474,7 @@ test('script first: photo analysis, free review, and no paid video before the cu
   // the customer edits a line: the review runs again, free
   r = await user('POST', '/api/videos/script-check', { description: 'كوتشي', offer: '500', script: { scenes: [{ voiceover: 'عليه ضمان سنة' }, { voiceover: 'اطلبه بسبع مية جنيه' }] }, limits: [14, 14] });
   assert.equal(r.status, 200);
-  assert.deepEqual([...new Set(r.data.issues.map((x) => x.kind))].sort(), ['INVENTED', 'PRICE']);
+  assert.deepEqual([...new Set(r.data.issues.map((x) => x.kind))].sort(), ['INVENTED', 'PRICE', 'TOO_SHORT'], 'short lines would leave silence');
 
   // ordering without a reviewed script is refused before anything is paid or charged
   const before = fake.submitted.length;

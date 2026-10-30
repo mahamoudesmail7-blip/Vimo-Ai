@@ -70,7 +70,7 @@ const lines = (...v) => v.map((voiceover) => ({ voiceover }));
 const kinds = (r) => r.issues.map((x) => x.kind);
 
 test('review: a clean script with the right price passes everything', () => {
-  const r = checkScript({ scenes: lines('رجلك بتوجعك من الجزمة كل ما تنزل؟', 'بتلبسه من غير رباط، ورمادي وأسود وكحلي', 'اطلبه دلوقتي بخمس مية جنيه بس'), limits: [18, 14, 14], offer: '500', facts: factsOf({ productName: 'كوتشي', analysis: normalizeAnalysis(SNEAKER) }) });
+  const r = checkScript({ scenes: lines('رجلك بتوجعك من الجزمة كل ما تنزل؟ جرّب الكوتشي ده وهتحس بالفرق وانت ماشي', 'بتلبسه بسرعة من غير رباط، ومتوفر رمادي وأسود وكحلي', 'اطلبه دلوقتي بخمس مية جنيه بس، والتوصيل لحد البيت'), limits: [18, 14, 14], offer: '500', facts: factsOf({ productName: 'كوتشي', analysis: normalizeAnalysis(SNEAKER) }) });
   assert.deepEqual(r.issues, []);
   assert.equal(r.ok, true);
   assert.ok(r.passed.includes('السعر متقال صح'));
@@ -108,7 +108,7 @@ test('hooks: deduped, scores clamped to 1-10, best first, five at most', () => {
 test('script: five scored hooks, the best opens scene 1, real-use scenes and every color are asked for', async () => {
   const analysis = normalizeAnalysis(SNEAKER);
   const best = 'رجلك بتوجعك من الجزمة كل ما تنزل؟';
-  const good = ['رجلك بتوجعك من الجزمة كل ما تنزل؟ جرّب ده', 'بتلبسه من غير رباط، ورمادي وأسود وكحلي', 'اطلبه دلوقتي بخمس مية جنيه بس'];
+  const good = ['رجلك بتوجعك من الجزمة كل ما تنزل؟ جرّب الكوتشي ده وهتحس بالفرق وانت ماشي', 'بتلبسه بسرعة من غير رباط، ومتوفر رمادي وأسود وكحلي', 'اطلبه دلوقتي بخمس مية جنيه بس، والتوصيل لحد البيت'];
   await withFal((body, n) => (n === 1 ? JSON.stringify({
     product: { what: 'slip-on sneaker', usage: 'worn on the feet while walking', details: 'white sole' },
     hooks: [{ text: 'كوتشي جديد', score: 5, why: 'عادي' }, { text: best, score: 9, angle: 'pain', why: 'سؤال عن وجع يومي' }, { text: 'مش هتصدق', score: 7 }, { text: 'إنت ولا هما؟', score: 6 }, { text: 'بخمس مية بس', score: 4 }],
@@ -208,5 +208,20 @@ test('the seller picks how old the person in the ad is (20 to 60)', async () => 
   await withFal(() => JSON.stringify({ scenes: [] }), async (calls) => {
     await writeScript({ productName: 'حزام تدفئة', clipCount: 3, sceneSeconds: [8, 6, 6], voiceGender: 'MALE', age: 50, imageDataUrl: [IMG] });
     assert.match(calls[0].body.prompt, /Speaker: a mature Egyptian man who is about 50 years old/);
+  });
+});
+
+test('review: a line too short for its scene is caught and the fixing pass fills it', async () => {
+  assert.ok(kinds(checkScript({ scenes: lines('اطلب دلوقتي والدفع عند الاستلام'), limits: [14] })).includes('TOO_SHORT'));
+  assert.deepEqual(kinds(checkScript({ scenes: lines('اطلبه دلوقتي والتوصيل لحد باب البيت والدفع عند الاستلام كمان'), limits: [14] })), []);
+  const short = ['بتعاني من ضغط الدم؟ الحل أهو', 'بضغطة زر تعرف ضغطك', 'شاشة رقمية واضحة', 'اطلب دلوقتي'];
+  const full = ['بتعاني من ضغط الدم ومش عارف تتابعه وانت في البيت؟ بص على الجهاز ده', 'بضغطة زر واحدة تعرف ضغطك في البيت، من غير مشوار للصيدلية', 'شاشته رقمية كبيرة وأرقامها واضحة، تقراها من غير نضارة', 'اطلبه دلوقتي، والتوصيل لحد باب البيت والدفع عند الاستلام'];
+  await withFal((body, n) => (n === 1 ? JSON.stringify({ scenes: short.map((voiceover) => ({ visual: 'v', motion: 'm', voiceover })) }) : n === 2 ? JSON.stringify({ lines: short }) : JSON.stringify({ lines: full })), async (calls) => {
+    const s = await writeScript({ productName: 'جهاز قياس الضغط', description: 'جهاز قياس ضغط بشاشة رقمية كبيرة', clipCount: 4, sceneSeconds: [8, 6, 6, 6], imageDataUrl: [IMG] });
+    assert.match(calls[0].body.prompt, /COUNT the words/);
+    assert.equal(calls.length, 3, 'the short lines start a fixing pass');
+    assert.match(calls[2].body.prompt, /محتاج \d+ كلمة على الأقل/);
+    assert.match(calls[2].body.prompt, /\(\d+ to 18 words\)/);
+    assert.ok(!kinds(s.checks).includes('TOO_SHORT'), JSON.stringify(s.checks.issues));
   });
 });

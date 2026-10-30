@@ -47,6 +47,9 @@ const numberWords = (withCurrency) => new RegExp(`(^|\\s)((تلات|ربع|خم�
  * @param {string} [p.facts]         everything the seller wrote + what the photos clearly show
  * @returns {{ok: boolean, issues: {scene: number|null, kind: string, message: string}[], passed: string[]}}
  */
+/** The fewest words that fill a scene with this word limit without dead air. */
+export const minWords = (limit) => Math.max(1, limit - 5);
+
 export function checkScript({ scenes, limits = [], offer = null, facts = '' }) {
   const issues = [];
   const add = (scene, kind, message) => issues.push({ scene, kind, message });
@@ -56,6 +59,8 @@ export function checkScript({ scenes, limits = [], offer = null, facts = '' }) {
   lines.forEach((line, i) => {
     const n = line.split(/\s+/).filter(Boolean).length;
     if (limits[i] && n > limits[i]) add(i, 'TOO_LONG', `المشهد ${i + 1} فيه ${n} كلمة، والمسموح ${limits[i]}.`);
+    // a short line leaves the speaker silent for the rest of the clip
+    else if (limits[i] && n < minWords(limits[i])) add(i, 'TOO_SHORT', `المشهد ${i + 1} فيه ${n} كلمة بس، ومحتاج ${minWords(limits[i])} كلمة على الأقل عشان يملا وقته من غير سكوت.`);
     for (const sentence of line.split(/[.!؟?،,]/)) {
       if (sentence.split(/\s+/).filter(Boolean).length > MAX_SENTENCE_WORDS) add(i, 'LONG_SENTENCE', `جملة طويلة في المشهد ${i + 1}: «${sentence.trim()}».`);
     }
@@ -103,7 +108,7 @@ export function checkScript({ scenes, limits = [], offer = null, facts = '' }) {
   for (const p of [...allowed].sort((a, b) => b.length - a.length)) rest = rest.split(p).join(' ');
   if (numberWords(!offer).test(rest)) add(null, 'PRICE', offer ? 'في رقم أو سعر في السكريبت مش من السعر اللي كتبته.' : 'السكريبت فيه سعر أو رقم، وإنت ما كتبتش سعر.');
 
-  const LABELS = { HARD_WORD: 'كلام سهل في النطق', REPEAT: 'مفيش كلام متكرر', INVENTED: 'مفيش مميزات متألفة', PRICE: offer ? 'السعر متقال صح' : 'مفيش أسعار متألفة', LONG_SENTENCE: 'الجمل قصيرة', TOO_LONG: 'الكلام على قد وقت كل مشهد', FORMAL: 'عامية مصرية مش فصحى', DIGITS: 'الأرقام مكتوبة كلام' };
+  const LABELS = { HARD_WORD: 'كلام سهل في النطق', REPEAT: 'مفيش كلام متكرر', INVENTED: 'مفيش مميزات متألفة', PRICE: offer ? 'السعر متقال صح' : 'مفيش أسعار متألفة', LONG_SENTENCE: 'الجمل قصيرة', TOO_LONG: 'الكلام على قد وقت كل مشهد', TOO_SHORT: 'الكلام مالي وقت كل مشهد', FORMAL: 'عامية مصرية مش فصحى', DIGITS: 'الأرقام مكتوبة كلام' };
   const failed = new Set(issues.map((x) => x.kind));
   return { ok: !issues.length, issues, passed: Object.entries(LABELS).filter(([k]) => !failed.has(k)).map(([, v]) => v) };
 }
