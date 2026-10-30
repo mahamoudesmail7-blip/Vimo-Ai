@@ -198,7 +198,7 @@ function scriptRequest({ productName, description, details, problem, offer, styl
     ...(clipCount === 4 ? [
       '- The 4 scenes are, in this order, and each one has ONE job. Do every job as well as a top Egyptian ad copywriter would:',
       '  1) THE HOOK: stop the scroll in 2 seconds. Name the buyer\'s problem or wish from the seller\'s words as a short question or a bold true claim, so the right buyer feels "ده أنا". Then one short line that promises the answer ("الحل أهو"، "بص على ده"). No product details yet.',
-      '  2) THE FEATURES (what it does FOR the buyer): turn the 1 or 2 strongest features into benefits they feel in their day: the problem gone, time or money saved, comfort, looks, confidence. Feature + "يعني" + benefit (e.g. "من غير سلك، يعني تاخده معاك في أي حتة"). Show it IN USE. Answer the one doubt that would stop them ordering with a true fact.',
+      '  2) THE FEATURES (what it does FOR the buyer): turn the 1 or 2 strongest features into benefits they feel in their day: the problem gone, time or money saved, comfort, looks, confidence. Feature + "يعني" + benefit (e.g. "من غير سلك، يعني تاخده معاك في أي حتة"). Its "visual" and "motion" show the person ACTUALLY USING it on themselves exactly as found in STEP 1 (e.g. the arm inside the cuff and the device running, the shoes on the feet), never only pointing at it or holding it. Answer the one doubt that would stop them ordering with a true fact.',
       '  3) THE DETAILS (why they can trust it): the concrete true facts only: how it works or is used in simple steps, its parts, size, material, colors/variants, what comes in the box, anything that makes it easy (charging, cleaning, sizes). Close-up on the product. Never a fact the seller did not give or the photos do not show.',
       '  4) THE OFFER: the price exactly as given (and the old price if given), why now (the offer, limited stock only if the seller said so), and a clear, easy order step (اطلب دلوقتي، التوصيل لحد البيت، الدفع عند الاستلام). End on the call to order.',
       '- The 4 lines are one continuous talk: each line leads into the next, no line repeats a benefit or a word from another line.',
@@ -224,7 +224,8 @@ function scriptRequest({ productName, description, details, problem, offer, styl
     '- the product appears exactly as in the photo, fully visible, at real-world size, held or used correctly as found in STEP 1;',
     '- when a scene\'s line names several colors or models, its visual shows ALL of them together, each exactly as in its photo (e.g. the person holds one pair and the other pairs sit next to them);',
     '- when a scene shows the product in use (worn, used), the visual makes that use clearly visible (e.g. full-body or feet shot with the shoes on);',
-    '- no text, no logos other than the product\'s own, no other products.',
+    '- no text, no logos other than the product\'s own, no other products;',
+    '- any screen or display on the product shows calm, normal content (for a health device a normal reading like 120/80, never an alarming one) and no brand name that is not on the product photo.',
     '',
     'Rules for "motion" (in English, max 50 words): what moves during the clip. Keep it simple and physically plausible: the speaker talks to the camera with natural gestures, small hand moves, a slow camera push or handheld sway. The product stays rigid and identical; it never transforms, opens or changes unless that is how it is really used.',
     '',
@@ -402,7 +403,7 @@ export function speakerOf(voiceGender, age) {
   const who = voiceGender === 'FEMALE' ? 'woman' : 'man';
   const look = a < 30 ? 'a young Egyptian' : a < 45 ? 'an Egyptian' : 'a mature Egyptian';
   const signs = a >= 50 ? ', with grey hair and the face of someone that age' : a >= 40 ? ', with a few grey hairs and the face of someone that age' : '';
-  return `${look} ${who} who is about ${a} years old${signs}`;
+  return `${look} ${who} who is about ${a} years old${signs}${a >= 40 ? ' (clearly not young)' : ''}`;
 }
 
 /** The image-edit prompt that turns the product photo into a scene's first frame. */
@@ -415,6 +416,7 @@ export function keyframePrompt(scene, { product, style, voiceGender, age, aspect
     product?.details ? `Product look: ${product.details}` : '',
     product?.usage ? `It is held and used like this: ${product.usage}` : '',
     'Show it at real-world size, fully visible, in correct use.',
+    'Any screen or display on the product shows calm, normal values (for a health device a normal reading such as 120/80, never an alarming one); never invent a brand name or text that is not on the reference product.',
     `${aspectRatio === '16:9' ? 'Horizontal 16:9' : 'Vertical 9:16'} frame, natural light, sharp focus on the product. No text, captions or watermarks.`,
   ].filter(Boolean).join(' ');
 }
@@ -439,6 +441,7 @@ export function scenePrompt(scene, { style, voiceGender, age, aspectRatio, produ
     mode === 'speech' ? (music === 'light' ? 'Light upbeat background music, quiet under the voice.' : 'No background music, only the voice and natural room sound.') : '',
     'The product must look exactly like the reference image for the whole clip: same shape, colors, logo, label and packaging. It does not morph, bend, melt or change; do not add or remove any part of the product.',
     product?.usage ? `It is used like this: ${product.usage}` : '',
+    'Any screen or display on the product shows calm, normal values (for a health device a normal reading such as 120/80, never an alarming one); never invent a brand name or text that is not on the reference product.',
     `Photorealistic real footage, ${aspectRatio === '9:16' ? 'vertical 9:16 frame' : 'horizontal 16:9 frame'}. No on-screen text, captions, subtitles or watermarks.`,
   ].filter(Boolean).join(' ');
 }
